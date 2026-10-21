@@ -34,9 +34,6 @@ struct SwiftCraftLauncherApp: App {
     @State var gameLaunchUseCase = GameLaunchUseCase()
     @State var container = DIContainer.shared
 
-    @Environment(\.openSettings)
-    private var openSettings
-
     private let notificationCenterDelegate = NotificationCenterDelegate()
 
     /// Configures global services and applies app‑level settings.
@@ -91,27 +88,6 @@ struct SwiftCraftLauncherApp: App {
             .applyRestorationBehaviorDisabled()
             .windowResizability(.contentSize)
 
-        MenuBarExtra(
-            content: {
-                MenuBarExtraContentView {
-                    openSettings()
-                }
-                .environment(playerListViewModel)
-                .environment(gameRepository)
-                .environment(gameLaunchUseCase)
-                .environment(container)
-            },
-            label: {
-                HStack {
-                    Image("menu-png")
-                        .renderingMode(.template)
-                        .scaledToFit()
-                    if !gameRepository.games.isEmpty {
-                        Text(" \(gameRepository.games.count)")
-                    }
-                }
-            },
-        )
     }
 
     /// Configures the shared URL cache with app‑defined capacity limits.
