@@ -57,10 +57,7 @@ final class AddPlayerSheetViewModel {
     var availableAuthTypes: [AccountAuthType] {
         var types: [AccountAuthType] = [.premium]
 
-        let canAdd = canAddOfflineAccount()
-        guard canAdd else { return types }
-
-        if DIContainer.shared.ui.playerSettingsManager.enableOfflineLogin {
+        if canAddOfflineAccount(), DIContainer.shared.ui.playerSettingsManager.enableOfflineLogin {
             types.append(.yggdrasil)
         }
 
