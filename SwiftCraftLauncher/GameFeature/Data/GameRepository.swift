@@ -127,6 +127,7 @@ class GameRepository {
             guard let self else { return }
             do {
                 try await initializeDatabase()
+                await importLegacyFabricProfileIfNeeded()
                 try await loadGamesThrowing()
                 await scanAllGamesModsDirectory()
                 await refreshWorkingPathOptions()
@@ -311,6 +312,58 @@ class GameRepository {
         }
         result.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         return result
+    }
+
+    private func importLegacyFabricProfileIfNeeded() async {
+        let gameName = "Fabric 26.3"
+        let workingPath = currentWorkingPath
+        let profileDirectory = AppPaths.profileDirectory(gameName: gameName)
+        let metadataURL = AppPaths.versionsDirectory
+            .appendingPathComponent(gameName, isDirectory: true)
+            .appendingPathComponent("\(gameName).json")
+
+        guard FileManager.default.fileExists(atPath: profileDirectory.path),
+              FileManager.default.fileExists(atPath: metadataURL.path) else {
+            return
+        }
+
+        let database = database
+        do {
+            let existingGames = try await Task.detached(priority: .userInitiated) {
+                try database.initialize()
+                return try database.loadGames(workingPath: workingPath)
+            }.value
+            guard !existingGames.contains(where: { $0.gameName == gameName }) else { return }
+
+            let metadata = try Data(contentsOf: metadataURL)
+            let manifest = try JSONDecoder().decode(MinecraftVersionManifest.self, from: metadata)
+            let fabricLibrary = manifest.libraries.first { $0.name.hasPrefix("net.fabricmc:fabric-loader:") }
+            let fabricVersion = fabricLibrary?.name.split(separator: ":").last.map(String.init) ?? ""
+
+            var game = GameVersionInfo(
+                gameName: gameName,
+                gameIcon: "",
+                gameVersion: manifest.id,
+                modVersion: fabricVersion,
+                assetIndex: manifest.assetIndex.id,
+                modLoader: GameLoader.fabric.displayName,
+                xms: 1024,
+                xmx: 8192,
+                javaVersion: manifest.javaVersion.majorVersion,
+                javaRuntimeComponent: manifest.javaVersion.component,
+                mainClass: manifest.mainClass,
+            )
+            game.launchCommand = try MinecraftLaunchCommandBuilder.buildThrowing(
+                manifest: manifest,
+                gameInfo: game,
+                launcherBrand: Bundle.main.appName,
+                launcherVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.3.5",
+            )
+            try await addGame(game)
+            AppLog.game.info("Imported existing Fabric profile: \(gameName)")
+        } catch {
+            AppLog.game.error("Could not import existing Fabric profile: \(error.localizedDescription)")
+        }
     }
 
     func loadGamesThrowing() async throws {

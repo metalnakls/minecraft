@@ -59,25 +59,20 @@ struct Arguments: Codable {
 
         if container.contains(.game) {
             let gameArgs = try container.decode([ArgumentValue].self, forKey: .game)
-            game = gameArgs.compactMap { arg in
-                if case let .string(value) = arg {
-                    return value
-                }
-                return nil
-            }
+            game = gameArgs.flatMap(Self.extractValues(from:))
         } else {
             game = nil
         }
 
         if container.contains(.jvm) {
             let jvmArgs = try container.decode([ArgumentValue].self, forKey: .jvm)
-            jvm = jvmArgs.flatMap { Self.extractJvmValues(from: $0) }
+            jvm = jvmArgs.flatMap(Self.extractValues(from:))
         } else {
             jvm = nil
         }
     }
 
-    private static func extractJvmValues(from value: ArgumentValue) -> [String] {
+    private static func extractValues(from value: ArgumentValue) -> [String] {
         switch value {
         case let .string(str):
             return [str]
@@ -123,6 +118,16 @@ enum ArgumentValue: Codable {
 struct ArgumentRuleObject: Codable {
     let rules: [Rule]
     let value: ArgumentValueArrayOrString
+
+    enum CodingKeys: String, CodingKey {
+        case rules, value
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        rules = try container.decodeIfPresent([Rule].self, forKey: .rules) ?? []
+        value = try container.decode(ArgumentValueArrayOrString.self, forKey: .value)
+    }
 }
 
 /// A value that can be either a string or an array of strings.
@@ -230,8 +235,22 @@ struct Library: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        downloads = try container.decode(LibraryDownloads.self, forKey: .downloads)
         name = try container.decode(String.self, forKey: .name)
+        if let libraryDownloads = try container.decodeIfPresent(LibraryDownloads.self, forKey: .downloads) {
+            downloads = libraryDownloads
+        } else {
+            // Legacy Launcher manifests can omit download metadata for libraries
+            // that are already present in the shared libraries directory.
+            downloads = LibraryDownloads(
+                artifact: LibraryArtifact(
+                    path: CommonService.mavenCoordinateToRelativePath(name),
+                    sha1: "",
+                    size: 0,
+                    url: nil,
+                ),
+                classifiers: nil,
+            )
+        }
         rules = try container.decodeIfPresent([Rule].self, forKey: .rules)
         natives = try container.decodeIfPresent([String: String].self, forKey: .natives)
         extract = try container.decodeIfPresent(LibraryExtract.self, forKey: .extract)

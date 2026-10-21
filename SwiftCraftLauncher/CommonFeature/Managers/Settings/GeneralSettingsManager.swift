@@ -26,7 +26,7 @@ final class GeneralSettingsManager {
         didSet { Defaults.save(limitCommonSheetHeight, forKey: AppConstants.UserDefaultsKeys.limitCommonSheetHeight) }
     }
 
-    var launcherWorkingDirectory: String = Defaults.loadString(forKey: AppConstants.UserDefaultsKeys.launcherWorkingDirectory, defaultValue: AppPaths.launcherSupportDirectory.path) {
+    var launcherWorkingDirectory: String = Defaults.loadString(forKey: AppConstants.UserDefaultsKeys.launcherWorkingDirectory, defaultValue: AppPaths.legacyGameDirectory.path) {
         didSet {
             Defaults.save(launcherWorkingDirectory, forKey: AppConstants.UserDefaultsKeys.launcherWorkingDirectory)
         }

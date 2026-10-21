@@ -230,6 +230,7 @@ class GameSetupUtil {
             xms: existingGame.xms,
             xmx: existingGame.xmx,
             javaVersion: existingGame.javaVersion,
+            javaRuntimeComponent: existingGame.javaRuntimeComponent,
             mainClass: existingGame.mainClass,
             gameArguments: existingGame.gameArguments,
             environmentVariables: existingGame.environmentVariables,

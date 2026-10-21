@@ -17,7 +17,13 @@ final class GameLaunchUseCase {
     ///   - player: The current player.
     ///   - game: The game version to launch.
     func launchGame(player: Player, game: GameVersionInfo) async {
-        let command = MinecraftLaunchCommand(player: player, game: game)
+        var launchGame = game
+        if !DIContainer.shared.system.javaManager.canJavaRun(at: launchGame.javaPath),
+           let component = launchGame.javaRuntimeComponent {
+            launchGame.javaPath = await DIContainer.shared.system.javaManager.ensureJavaExists(version: component)
+        }
+
+        let command = MinecraftLaunchCommand(player: player, game: launchGame)
         await command.launchGame()
     }
 

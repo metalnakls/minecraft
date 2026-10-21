@@ -127,7 +127,7 @@ enum AppConstants {
         static let schematics = "schematics"
         static let crashReports = "crash-reports"
         static let logs = "logs"
-        static let profiles = "profiles"
+        static let profiles = "home"
         static let runtime = "runtime"
         static let meta = "meta"
         static let cache = "cache"
@@ -260,7 +260,7 @@ extension Bundle {
     }
 
     var appName: String {
-        infoDictionary?["CFBundleName"] as? String ?? "Swift Craft Launcher"
+        infoDictionary?["CFBundleName"] as? String ?? "Minecraft"
     }
 
     var copyright: String {
@@ -268,7 +268,7 @@ extension Bundle {
     }
 
     var identifier: String {
-        infoDictionary?["CFBundleIdentifier"] as? String ?? "com.su.code.SwiftCraftLauncher"
+        infoDictionary?["CFBundleIdentifier"] as? String ?? "tsmc.minecraft"
     }
 
     var appCategory: String {

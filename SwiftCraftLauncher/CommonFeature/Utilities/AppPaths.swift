@@ -10,7 +10,13 @@ import Foundation
 /// Provides file system paths used throughout the application.
 enum AppPaths {
     static var launcherSupportDirectory: URL {
-        .applicationSupportDirectory.appendingPathComponent(Bundle.main.appName)
+        .applicationSupportDirectory.appendingPathComponent(Bundle.main.identifier, isDirectory: true)
+    }
+
+    /// The existing Legacy Launcher game directory shared by the local fork.
+    static var legacyGameDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/minecraft", isDirectory: true)
     }
 
     /// The root directory for authentication-related files.
@@ -36,7 +42,7 @@ enum AppPaths {
     }
 
     static var librariesDirectory: URL {
-        metaDirectory.appendingPathComponent(AppConstants.DirectoryNames.libraries)
+        legacyGameDirectory.appendingPathComponent(AppConstants.DirectoryNames.libraries, isDirectory: true)
     }
 
     static var nativesDirectory: URL {
@@ -44,11 +50,11 @@ enum AppPaths {
     }
 
     static var assetsDirectory: URL {
-        metaDirectory.appendingPathComponent(AppConstants.DirectoryNames.assets)
+        legacyGameDirectory.appendingPathComponent(AppConstants.DirectoryNames.assets, isDirectory: true)
     }
 
     static var versionsDirectory: URL {
-        metaDirectory.appendingPathComponent(AppConstants.DirectoryNames.versions)
+        legacyGameDirectory.appendingPathComponent(AppConstants.DirectoryNames.versions, isDirectory: true)
     }
 
     static var indexesDirectory: URL {

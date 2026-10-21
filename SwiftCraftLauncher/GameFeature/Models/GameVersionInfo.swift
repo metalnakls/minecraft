@@ -56,6 +56,9 @@ struct GameVersionInfo: Codable, Identifiable, Hashable, Sendable {
 
     var javaVersion: Int
 
+    /// The Mojang runtime component needed by this profile, when known.
+    var javaRuntimeComponent: String?
+
     /// The fully qualified main class name.
     var mainClass: String
 
@@ -103,6 +106,7 @@ struct GameVersionInfo: Codable, Identifiable, Hashable, Sendable {
         xms: Int = 0,
         xmx: Int = 0,
         javaVersion: Int = 8,
+        javaRuntimeComponent: String? = nil,
         mainClass: String = "",
         gameArguments: [String] = [],
         environmentVariables: String = "",
@@ -125,6 +129,7 @@ struct GameVersionInfo: Codable, Identifiable, Hashable, Sendable {
         self.mainClass = mainClass
         self.gameArguments = gameArguments
         self.javaVersion = javaVersion
+        self.javaRuntimeComponent = javaRuntimeComponent
         self.environmentVariables = environmentVariables
     }
 }
