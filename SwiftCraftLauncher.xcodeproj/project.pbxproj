@@ -30,7 +30,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		90D620D12FD7083C00108105 /* Swift Craft Launcher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Swift Craft Launcher.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		90D620D12FD7083C00108105 /* Minecraft.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Minecraft.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		90TEST0062E3139B5005A53F1 /* SwiftCraftLauncherTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftCraftLauncherTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -93,7 +93,7 @@
 			children = (
 				9023D8332E3139B5005A53F1 /* SwiftCraftLauncher */,
 				90TEST0012E3139B5005A53F1 /* SwiftCraftLauncherTests */,
-				90D620D12FD7083C00108105 /* Swift Craft Launcher.app */,
+				90D620D12FD7083C00108105 /* Minecraft.app */,
 				90TEST0062E3139B5005A53F1 /* SwiftCraftLauncherTests.xctest */,
 			);
 			sourceTree = "<group>";
@@ -129,8 +129,8 @@
 				90A1FC1D2FB6406900DAD001 /* SwiftNBT */,
 				909FCDCC303A038B001CBE3D /* TouchBarSupport */,
 			);
-			productName = SwiftCraftLauncher;
-			productReference = 90D620D12FD7083C00108105 /* Swift Craft Launcher.app */;
+			productName = Minecraft;
+			productReference = 90D620D12FD7083C00108105 /* Minecraft.app */;
 			productType = "com.apple.product-type.application";
 		};
 		90TEST0022E3139B5005A53F1 /* SwiftCraftLauncherTests */ = {
@@ -331,7 +331,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher Team; modified local fork";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.3.5;
@@ -394,7 +394,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher Team; modified local fork";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.3.5;
@@ -409,7 +409,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = "$(ARCHS_STANDARD)";
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = minecraft;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = SwiftCraftLauncher/SwiftCraftLauncher.entitlements;
@@ -422,7 +422,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SwiftCraftLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher Team; modified local fork";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used when voice input features are enabled.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -431,9 +431,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.3.5;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.su.code.SwiftCraftLauncher;
+				PRODUCT_BUNDLE_IDENTIFIER = tsmc.minecraft;
 				PRODUCT_MODULE_NAME = SwiftCraftLauncher;
-				PRODUCT_NAME = "Swift Craft Launcher";
+				PRODUCT_NAME = Minecraft;
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6;
@@ -444,7 +444,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = "$(ARCHS_STANDARD)";
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = minecraft;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = SwiftCraftLauncher/SwiftCraftLauncher.entitlements;
@@ -457,7 +457,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SwiftCraftLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025-2026 Swift Craft Launcher Team; modified local fork";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used when voice input features are enabled.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -466,9 +466,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.3.5;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.su.code.SwiftCraftLauncher;
+				PRODUCT_BUNDLE_IDENTIFIER = tsmc.minecraft;
 				PRODUCT_MODULE_NAME = SwiftCraftLauncher;
-				PRODUCT_NAME = "Swift Craft Launcher";
+				PRODUCT_NAME = Minecraft;
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6;
@@ -494,7 +494,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Swift Craft Launcher.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Swift Craft Launcher";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Minecraft.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Minecraft";
 			};
 			name = Debug;
 		};
@@ -517,7 +517,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Swift Craft Launcher.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Swift Craft Launcher";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Minecraft.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Minecraft";
 			};
 			name = Release;
 		};

@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "9023D8302E3139B5005A53F1"
-               BuildableName = "Swift Craft Launcher.app"
+               BuildableName = "Minecraft.app"
                BlueprintName = "SwiftCraftLauncher"
                ReferencedContainer = "container:SwiftCraftLauncher.xcodeproj">
             </BuildableReference>
@@ -70,7 +70,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "9023D8302E3139B5005A53F1"
-            BuildableName = "Swift Craft Launcher.app"
+            BuildableName = "Minecraft.app"
             BlueprintName = "SwiftCraftLauncher"
             ReferencedContainer = "container:SwiftCraftLauncher.xcodeproj">
          </BuildableReference>
@@ -87,7 +87,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "9023D8302E3139B5005A53F1"
-            BuildableName = "Swift Craft Launcher.app"
+            BuildableName = "Minecraft.app"
             BlueprintName = "SwiftCraftLauncher"
             ReferencedContainer = "container:SwiftCraftLauncher.xcodeproj">
          </BuildableReference>
