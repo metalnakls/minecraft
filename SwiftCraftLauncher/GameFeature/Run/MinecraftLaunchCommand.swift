@@ -38,7 +38,7 @@ struct MinecraftLaunchCommand {
 
         // Patch at launch time as well so already-created instances pick up the fix.
         let command = MinecraftLaunchCommandBuilder.injectingLibraryDirectoryIfNeeded(
-            into: game.launchCommand,
+            into: MinecraftLaunchCommandBuilder.removingQuickPlayArguments(from: game.launchCommand),
             modLoader: game.modLoader,
         )
         try await launchGameProcess(

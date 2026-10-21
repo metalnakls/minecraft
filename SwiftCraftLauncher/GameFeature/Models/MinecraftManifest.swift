@@ -161,25 +161,34 @@ struct Rule: Codable {
 
 /// Feature flags used in conditional rules.
 struct Features: Codable {
-    let is_demo_user: Bool
-    let has_custom_resolution: Bool
-    let has_quick_plays_support: Bool
-    let is_quick_play_singleplayer: Bool
-    let is_quick_play_multiplayer: Bool
-    let is_quick_play_realms: Bool
+    private let values: [String: Bool]
+
+    /// The launcher currently starts a normal game session without Quick Play or custom resolution.
+    var matchesDefaultLaunch: Bool {
+        values.values.allSatisfy { !$0 }
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        is_demo_user = (try? container.decodeIfPresent(Bool.self, forKey: .is_demo_user)) ?? false
-        has_custom_resolution = (try? container.decodeIfPresent(Bool.self, forKey: .has_custom_resolution)) ?? false
-        has_quick_plays_support = (try? container.decodeIfPresent(Bool.self, forKey: .has_quick_plays_support)) ?? false
-        is_quick_play_singleplayer = (try? container.decodeIfPresent(Bool.self, forKey: .is_quick_play_singleplayer)) ?? false
-        is_quick_play_multiplayer = (try? container.decodeIfPresent(Bool.self, forKey: .is_quick_play_multiplayer)) ?? false
-        is_quick_play_realms = (try? container.decodeIfPresent(Bool.self, forKey: .is_quick_play_realms)) ?? false
+        var values: [String: Bool] = [:]
+        for key in CodingKeys.allCases {
+            if let value = try container.decodeIfPresent(Bool.self, forKey: key) {
+                values[key.rawValue] = value
+            }
+        }
+        self.values = values
     }
 
-    enum CodingKeys: String, CodingKey {
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        for key in CodingKeys.allCases {
+            if let value = values[key.rawValue] {
+                try container.encode(value, forKey: key)
+            }
+        }
+    }
+
+    enum CodingKeys: String, CodingKey, CaseIterable {
         case is_demo_user, has_custom_resolution, has_quick_plays_support
         case is_quick_play_singleplayer, is_quick_play_multiplayer, is_quick_play_realms
     }

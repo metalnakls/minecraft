@@ -24,6 +24,7 @@ enum RuleAction: String {
 struct MacRule {
     let action: RuleAction
     let os: MacOS?
+    let features: Features?
 }
 
 /// Evaluates Minecraft library rules against the current platform.
@@ -84,7 +85,7 @@ enum MacRuleEvaluator {
                 macOS = nil // No OS restriction.
             }
 
-            return MacRule(action: action, os: macOS)
+            return MacRule(action: action, os: macOS, features: rule.features)
         }
     }
 
@@ -111,7 +112,8 @@ enum MacRuleEvaluator {
         for identifier in supportedIdentifiers {
             let macOS = MacOS(rawValue: identifier)
             let matchingRules = macRules.filter { rule in
-                rule.os == nil || rule.os == macOS
+                (rule.os == nil || rule.os == macOS)
+                    && (rule.features?.matchesDefaultLaunch ?? true)
             }
             if !matchingRules.isEmpty {
                 applicableRules = matchingRules
@@ -121,7 +123,9 @@ enum MacRuleEvaluator {
 
         // Fall back to rules with no OS restriction if none matched.
         if applicableRules.isEmpty {
-            applicableRules = macRules.filter { $0.os == nil }
+            applicableRules = macRules.filter {
+                $0.os == nil && ($0.features?.matchesDefaultLaunch ?? true)
+            }
         }
 
         guard !applicableRules.isEmpty else { return false }
