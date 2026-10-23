@@ -32,6 +32,58 @@ enum NativeJavaRuntime {
         if let invocation { exit(invocation.run()) }
     }
 
+    private struct PreparedLaunch {
+        let launch: Launch
+        var arguments: [UnsafeMutablePointer<CChar>?]
+        let names: [UnsafeMutablePointer<CChar>?]
+    }
+    private static var preparedLaunch: PreparedLaunch?
+    static var preparingAtStartup = false
+
+    /// Called from the native entry point, after the preparation task has returned.
+    static func runPreparedGameIfNeeded() {
+        guard var prepared = preparedLaunch else { return }
+        preparedLaunch = nil
+        configureNativeApplication()
+        let status = prepared.arguments.withUnsafeMutableBufferPointer { buffer in
+            let call = Invocation(launch: prepared.launch, count: Int32(buffer.count - 1),
+                                  arguments: buffer.baseAddress!, names: prepared.names)
+            invocation = call
+            return call.run()
+        }
+        exit(status)
+    }
+
+    /// SDL deliberately leaves application initialization to an existing native host.
+    private static func configureNativeApplication() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        if app.windowsMenu == nil {
+            let menu = app.mainMenu ?? NSMenu()
+            if menu.items.isEmpty {
+                let applicationMenu = NSMenu(title: Bundle.main.appName)
+                applicationMenu.addItem(withTitle: "Hide Minecraft", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+                applicationMenu.addItem(.separator())
+                applicationMenu.addItem(withTitle: "Quit Minecraft", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+                let item = NSMenuItem()
+                item.submenu = applicationMenu
+                menu.addItem(item)
+            }
+            let windows = NSMenu(title: "Window")
+            windows.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+            windows.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+            windows.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+            let fullscreen = windows.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+            fullscreen.keyEquivalentModifierMask = [.command, .control]
+            let item = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+            item.submenu = windows
+            menu.addItem(item)
+            app.mainMenu = menu
+            app.windowsMenu = windows
+        }
+        if !app.isRunning { app.finishLaunching() }
+    }
+
     static func launch(
         javaExecutable: String,
         arguments: [String],
@@ -62,22 +114,17 @@ enum NativeJavaRuntime {
         }
         if !options.contains("-XstartOnFirstThread") { options.insert("-XstartOnFirstThread", at: 0) }
         options.insert("-Dmcopt.app.preserveIcon=true", at: 0)
-        var argv = ([javaExecutable] + options).map { strdup($0) } + [nil]
+        let argv = ([javaExecutable] + options).map { strdup($0) } + [nil]
         let names = (["25", "25", "Minecraft", "java"] as [String]).map { strdup($0) }
-        defer {
-            argv.forEach { free($0) }
-            names.forEach { free($0) }
-        }
-        // Only Option mode has launcher windows. Close those before the game creates its window.
+        preparedLaunch = PreparedLaunch(launch: launch, arguments: argv, names: names)
         NSApp?.windows.forEach { $0.close() }
-        let status = argv.withUnsafeMutableBufferPointer { buffer in
-            let call = Invocation(launch: launch, count: Int32(buffer.count - 1),
-                                  arguments: buffer.baseAddress!, names: names)
-            invocation = call
-            return call.run()
+        if !preparingAtStartup {
+            // Leave the Swift task/main dispatch callback before starting the game's event loop.
+            CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
+                runPreparedGameIfNeeded()
+            }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
         }
-        // The JVM cannot be restarted safely in this process after its main method exits.
-        exit(status)
     }
 
     private static func launchError(_ message: String) -> GlobalError {

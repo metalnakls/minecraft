@@ -9,6 +9,8 @@ enum MinecraftMain {
         NativeJavaRuntime.resumeLauncherThreadIfNeeded()
         if !NSEvent.modifierFlags.contains(.option),
            !CommandLine.arguments.contains("--launcher") {
+            _ = NSApplication.shared
+            NativeJavaRuntime.preparingAtStartup = true
             Task { @MainActor in
                 let players = PlayerListViewModel()
                 players.loadPlayersIfNeeded()
@@ -18,9 +20,12 @@ enum MinecraftMain {
                     await GameLaunchUseCase().launchGame(player: player, game: game)
                 }
                 // Missing setup or a preparation failure opens the launcher for recovery.
-                CFRunLoopStop(CFRunLoopGetMain())
+                NativeJavaRuntime.preparingAtStartup = false
             }
-            CFRunLoopRun()
+            while NativeJavaRuntime.preparingAtStartup {
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            }
+            NativeJavaRuntime.runPreparedGameIfNeeded()
         }
         SwiftCraftLauncherApp.main()
     }
