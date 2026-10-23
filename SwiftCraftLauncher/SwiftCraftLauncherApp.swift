@@ -23,6 +23,7 @@
 //  This program includes additional terms for source attribution and name usage.
 //  See doc/ADDITIONAL_TERMS.md in the project root for details.
 
+import AppKit
 import SwiftUI
 import UserNotifications
 
@@ -33,11 +34,13 @@ struct SwiftCraftLauncherApp: App {
     @State var gameRepository = GameRepository()
     @State var gameLaunchUseCase = GameLaunchUseCase()
     @State var container = DIContainer.shared
+    private let shouldAutoLaunchGameAtStartup: Bool
 
     private let notificationCenterDelegate = NotificationCenterDelegate()
 
     /// Configures global services and applies app‑level settings.
     init() {
+        shouldAutoLaunchGameAtStartup = !NSEvent.modifierFlags.contains(.option)
         Self.configureURLCache()
         Self.configureNotifications(delegate: notificationCenterDelegate)
     }
@@ -45,7 +48,7 @@ struct SwiftCraftLauncherApp: App {
     /// The app's scene hierarchy.
     var body: some Scene {
         Window(Bundle.main.appName, id: AppWindowID.main.rawValue) {
-            MainView()
+            MainView(shouldAutoLaunchGameAtStartup: shouldAutoLaunchGameAtStartup)
                 .environment(playerListViewModel)
                 .environment(gameRepository)
                 .environment(gameLaunchUseCase)
