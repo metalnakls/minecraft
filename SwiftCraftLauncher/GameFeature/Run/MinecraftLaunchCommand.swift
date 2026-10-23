@@ -6,6 +6,7 @@
 //
 
 import AVFoundation
+import Darwin
 import Foundation
 
 /// Orchestrates the Minecraft game launch process including authentication and process management.
@@ -246,41 +247,62 @@ struct MinecraftLaunchCommand {
 
         AppLog.game.info("Game working directory: \(gameWorkingDirectory.path)")
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: javaExecutable)
-        process.arguments = command
-        process.currentDirectoryURL = gameWorkingDirectory
+        try await replaceLauncherProcess(
+            javaExecutable: javaExecutable,
+            command: command,
+            workingDirectory: gameWorkingDirectory,
+        )
+    }
 
-        if !game.environmentVariables.isEmpty {
-            var env = ProcessInfo.processInfo.environment
-            for (key, value) in EnvironmentVariablesParser.parse(game.environmentVariables) {
-                env[key] = value
-            }
-            process.environment = env
-        }
-
-        await DIContainer.shared.core.gameProcessManager.storeProcess(gameId: game.id, userId: player.id, process: process)
-
-        do {
-            try process.run()
-
-            _ = await MainActor.run {
-                DIContainer.shared.core.gameStatusManager.setGameRunning(gameId: game.id, userId: player.id, isRunning: true)
-            }
-        } catch {
-            AppLog.game.error("Failed to launch process: \(error.localizedDescription)")
-
-            _ = await DIContainer.shared.core.gameProcessManager.stopProcess(for: game.id, userId: player.id)
-            _ = await MainActor.run {
-                DIContainer.shared.core.gameStatusManager.setGameRunning(gameId: game.id, userId: player.id, isRunning: false)
-            }
-
+    /// Replaces the launcher with the game, retaining its process and macOS app identity.
+    @MainActor
+    private func replaceLauncherProcess(
+        javaExecutable: String,
+        command: [String],
+        workingDirectory: URL,
+    ) throws {
+        let fileManager = FileManager.default
+        let previousDirectory = fileManager.currentDirectoryPath
+        guard fileManager.changeCurrentDirectoryPath(workingDirectory.path) else {
             throw GlobalError.gameLaunch(
                 i18nKey: "error.game_launch.process_failed",
                 level: .popup,
-                message: "Failed to start process for game=\(game.gameName), javaPath=\(javaExecutable): \(error.localizedDescription)",
+                message: "Cannot open game directory: \(workingDirectory.path)",
             )
         }
+        defer { _ = fileManager.changeCurrentDirectoryPath(previousDirectory) }
+
+        var environment = ProcessInfo.processInfo.environment
+        for (key, value) in EnvironmentVariablesParser.parse(game.environmentVariables) {
+            environment[key] = value
+        }
+
+        var identityArguments = ["-Xdock:name=\(Bundle.main.appName)"]
+        if let icon = Bundle.main.url(forResource: "minecraft", withExtension: "icns") {
+            identityArguments.append("-Xdock:icon=\(icon.path)")
+        }
+        let gameArguments = command.filter {
+            !$0.hasPrefix("-Xdock:name=") && !$0.hasPrefix("-Xdock:icon=")
+        }
+        var arguments = ([javaExecutable] + identityArguments + gameArguments).map { strdup($0) } + [nil]
+        var variables = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer {
+            arguments.forEach { free($0) }
+            variables.forEach { free($0) }
+        }
+
+        // A successful exec never returns: Java becomes this app's running executable.
+        _ = arguments.withUnsafeMutableBufferPointer { argv in
+            variables.withUnsafeMutableBufferPointer { envp in
+                execve(javaExecutable, argv.baseAddress!, envp.baseAddress!)
+            }
+        }
+        let failure = String(cString: strerror(errno))
+        throw GlobalError.gameLaunch(
+            i18nKey: "error.game_launch.process_failed",
+            level: .popup,
+            message: "Failed to start game=\(game.gameName), javaPath=\(javaExecutable): \(failure)",
+        )
     }
 
     private func handleLaunchError(_ error: Error) async {
