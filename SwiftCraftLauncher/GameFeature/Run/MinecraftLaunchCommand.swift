@@ -254,54 +254,17 @@ struct MinecraftLaunchCommand {
         )
     }
 
-    /// Replaces the launcher with the game, retaining its process and macOS app identity.
     @MainActor
     private func replaceLauncherProcess(
         javaExecutable: String,
         command: [String],
         workingDirectory: URL,
     ) throws {
-        let fileManager = FileManager.default
-        let previousDirectory = fileManager.currentDirectoryPath
-        guard fileManager.changeCurrentDirectoryPath(workingDirectory.path) else {
-            throw GlobalError.gameLaunch(
-                i18nKey: "error.game_launch.process_failed",
-                level: .popup,
-                message: "Cannot open game directory: \(workingDirectory.path)",
-            )
-        }
-        defer { _ = fileManager.changeCurrentDirectoryPath(previousDirectory) }
-
-        var environment = ProcessInfo.processInfo.environment
-        for (key, value) in EnvironmentVariablesParser.parse(game.environmentVariables) {
-            environment[key] = value
-        }
-
-        var identityArguments = ["-Xdock:name=\(Bundle.main.appName)"]
-        if let icon = Bundle.main.url(forResource: "minecraft", withExtension: "icns") {
-            identityArguments.append("-Xdock:icon=\(icon.path)")
-        }
-        let gameArguments = command.filter {
-            !$0.hasPrefix("-Xdock:name=") && !$0.hasPrefix("-Xdock:icon=")
-        }
-        var arguments = ([javaExecutable] + identityArguments + gameArguments).map { strdup($0) } + [nil]
-        var variables = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
-        defer {
-            arguments.forEach { free($0) }
-            variables.forEach { free($0) }
-        }
-
-        // A successful exec never returns: Java becomes this app's running executable.
-        _ = arguments.withUnsafeMutableBufferPointer { argv in
-            variables.withUnsafeMutableBufferPointer { envp in
-                execve(javaExecutable, argv.baseAddress!, envp.baseAddress!)
-            }
-        }
-        let failure = String(cString: strerror(errno))
-        throw GlobalError.gameLaunch(
-            i18nKey: "error.game_launch.process_failed",
-            level: .popup,
-            message: "Failed to start game=\(game.gameName), javaPath=\(javaExecutable): \(failure)",
+        try NativeJavaRuntime.launch(
+            javaExecutable: javaExecutable,
+            arguments: command,
+            workingDirectory: workingDirectory,
+            environment: EnvironmentVariablesParser.parse(game.environmentVariables),
         )
     }
 
