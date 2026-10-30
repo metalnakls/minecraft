@@ -1,0 +1,8 @@
+release/
+staging/
+build/
+validation/
+resolved-mods.json
+java-runtime-manifest.json
+__pycache__/
+!*.sh
