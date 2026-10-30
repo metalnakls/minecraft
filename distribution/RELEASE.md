@@ -1,0 +1,19 @@
+# Release steps
+
+The source preparation and finalization scripts are local-only. Publishing is a separate, explicitly approved action.
+
+1. Build the committed launcher with `build-launcher.sh /absolute/output-directory`. Build the committed shader revision in an isolated checkout with its Gradle wrapper and JDK 25. Keep the corresponding source archives and revision IDs.
+2. Prepare a Developer ID Application signed launcher with Hardened Runtime. This launcher embeds Java in its process, so its distribution entitlements must support HotSpot JIT and loading independently signed Java/mod native libraries. Sign nested Sparkle executables, XPC services, helper apps and frameworks inside-out before the main app; preserve each component's appropriate entitlements. Do not use `codesign --deep` for signing.
+3. When external notarization is authorized, submit with `xcrun notarytool`, inspect the result, and staple the accepted ticket. No notarization upload is performed by these scripts.
+4. Resolve exact mod files using `resolve-mods.py`. Verify any explicit bundled mod's redistribution notices before selecting it with `--bundled-mod`; automatic rehosting of unresolved files is intentionally not supported.
+5. Run `finalize-release.sh` with the signed/stapled app, official Java manifest, rebuilt shader JAR and proposed versioned shader URL. This verifies the signature and ticket, creates the assets, and records their hashes.
+6. Review release notes, source revisions, artifacts and target repositories. Publish only after explicit authorization. Run the public `--dry-run` and test the complete installation on a fresh Mac before sharing the command.
+
+Proposed repository split:
+
+- `metalnakls/minecraft`: launcher ZIP, installer, manifests, settings archive, modified Mac input-fix JAR and its notices, launcher source archive, checksums and optional skin helper.
+- `metalnakls/minecraftmetalshaders`: shader JAR, matching source archive, checksums and release notes.
+
+The one-command install downloads the versioned script to a temporary file and then runs it with the same pinned release URL. It does not pipe into bash because download workers need a real script path. Add `--dry-run` to check availability without installation.
+
+Do not publish generated settings or player skin files without reviewing them. Saves and credentials are excluded by the builder, but the chosen controls, visual preferences and skin artwork are intentional shared content.
