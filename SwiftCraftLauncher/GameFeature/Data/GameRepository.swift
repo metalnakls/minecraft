@@ -128,6 +128,7 @@ class GameRepository {
             do {
                 try await initializeDatabase()
                 await importLegacyFabricProfileIfNeeded()
+                try await applySharedLaunchSettingsIfNeeded()
                 try await loadGamesThrowing()
                 await scanAllGamesModsDirectory()
                 await refreshWorkingPathOptions()
@@ -312,6 +313,30 @@ class GameRepository {
         }
         result.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         return result
+    }
+
+    private func applySharedLaunchSettingsIfNeeded() async throws {
+        let profile = AppPaths.profileDirectory(gameName: "Fabric 26.3")
+        guard let pending = try SharedLaunchSettings.pending(in: profile) else { return }
+        let database = database
+        let workingPath = currentWorkingPath
+        let games = try await Task.detached {
+            try database.loadGames(workingPath: workingPath)
+        }.value
+        guard var game = games.first(where: { $0.gameName == "Fabric 26.3" }) else { return }
+        guard game.javaVersion >= 25 else { throw CocoaError(.fileReadCorruptFile) }
+        try SharedLaunchSettings(schema: 1, jvmArguments: game.jvmArguments, xms: game.xms, xmx: game.xmx)
+            .backup(in: profile)
+        game.jvmArguments = pending.settings.jvmArguments
+        game.xms = pending.settings.xms
+        game.xmx = pending.settings.xmx
+        game.launchCommand = SharedLaunchSettings.removingCollectorOptions(from: game.launchCommand)
+        let updated = game
+        try await Task.detached {
+            try database.saveGame(updated, workingPath: workingPath)
+        }.value
+        try SharedLaunchSettings.markApplied(pending, in: profile)
+        AppLog.game.info("Applied shared ZGC and memory settings for Fabric 26.3")
     }
 
     private func importLegacyFabricProfileIfNeeded() async {

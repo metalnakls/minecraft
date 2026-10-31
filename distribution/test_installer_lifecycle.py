@@ -37,6 +37,8 @@ with tempfile.TemporaryDirectory(prefix='minecraft-lifecycle-') as directory:
     (release/'downloads.tsv').write_text('\n'.join(rows)+'\n')
     (release/'runtime-links.tsv').write_text('runtime/java\tjre.bundle/Contents/Home/bin/java\n')
     settings=root/'settings'; put(settings/'game/home/Fabric 26.3/options.txt','template settings')
+    put(settings/'game/home/Fabric 26.3/shared-launch-settings.json','{"schema":1,"jvmArguments":"-XX:+UseZGC","xms":1024,"xmx":8192}')
+    put(profile/'.shared-launch-settings.applied','old settings marker')
     with tarfile.open(release/'settings.tar.gz','w:gz') as tar: tar.add(settings/'game',arcname='game')
     shutil.copy2(args.launcher_zip,release/'Minecraft-arm64.zip')
     # Simulate Lisa's previous successful downloads in the older random stage layout.
@@ -67,10 +69,12 @@ with tempfile.TemporaryDirectory(prefix='minecraft-lifecycle-') as directory:
         assert result.returncode==0,result.stdout+result.stderr
         assert 'Progress: 3/3 files' in result.stdout,result.stdout
         assert (game/'libraries/test.jar').read_text()=='matching library'
-        assert (profile/'options.txt').read_text()=='personal settings'
+        assert (profile/'options.txt').read_text()=='template settings'
         assert (profile/'saves/world/level.dat').read_text()=='personal world'
         assert (profile/'accounts.json').read_text()=='personal account'
         assert not (base/'setup.lock').exists()
+        assert not (profile/'.shared-launch-settings.applied').exists()
+        assert '-XX:+UseZGC' in (profile/'shared-launch-settings.json').read_text()
         assert len(list(base.glob('stage-*')))==1
         if iteration==0: assert 'Reusing previous download: Minecraft-arm64.zip' in result.stdout
         if iteration==1: assert '3 reused from installation' in result.stdout and '0 downloaded' in result.stdout

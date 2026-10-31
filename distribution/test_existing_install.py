@@ -37,6 +37,10 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     put(staged/'options.txt', 'template settings')
     put(staged/'config/test.json', 'template config')
     put(staged/'config/new.json', 'new config')
+    put(profile/'config/mcopt.properties', 'mcopt.shade.user.bloom=10\n')
+    put(staged/'config/mcopt.properties', 'mcopt.shade.user.bloom=200\n')
+    put(profile/'config/DistantHorizons.toml', 'vanillaFadeMode = "DOUBLE_PASS"\n')
+    put(staged/'config/DistantHorizons.toml', 'vanillaFadeMode = "NONE"\n')
     put(staged/'CustomSkinLoader/LocalSkin/skins/Lisa.png', 'template skin')
     put(game/'libraries/shared.jar', 'old library')
     put(stage/'game/libraries/shared.jar', 'new library')
@@ -47,10 +51,14 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     jar(profile/'mods/renamed-renderer.jar', 'sodium', '0.9.2+mc26.3')
     sodium = (profile/'mods/renamed-renderer.jar').read_bytes()
     old_mod = (profile/'mods/old-name.jar').read_bytes()
-    preserved = {p: p.read_bytes() for p in profile.rglob('*') if p.is_file() and 'mods' not in p.parts}
+    preserved = {p: p.read_bytes() for p in profile.rglob('*') if p.is_file() and 'mods' not in p.parts and p not in [profile/'options.txt', profile/'config/test.json', profile/'config/mcopt.properties', profile/'config/DistantHorizons.toml']}
     run('merge_game')
     assert all(p.read_bytes() == value for p, value in preserved.items())
     assert (profile/'config/new.json').read_text() == 'new config'
+    assert (profile/'options.txt').read_text() == 'template settings'
+    assert (profile/'config/test.json').read_text() == 'template config'
+    assert (profile/'config/mcopt.properties').read_text() == 'mcopt.shade.user.bloom=200\n'
+    assert (profile/'config/DistantHorizons.toml').read_text() == 'vanillaFadeMode = "NONE"\n'
     assert (profile/'mods/mcui.jar').exists() and not (profile/'mods/old-name.jar').exists()
     assert (profile/'mods/unrelated.jar').exists()
     assert not (profile/'mods/renamed-renderer.jar').exists(), 'Conflicting Sodium is still enabled'
@@ -58,6 +66,8 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     assert len(backups) == 1
     assert (backups[0]/'game/home/Fabric 26.3/mods/old-name.jar').read_bytes() == old_mod
     assert (backups[0]/'game/libraries/shared.jar').read_text() == 'old library'
+    assert (backups[0]/'game/home/Fabric 26.3/config/mcopt.properties').read_text() == 'mcopt.shade.user.bloom=10\n'
+    assert (backups[0]/'game/home/Fabric 26.3/options.txt').read_text() == 'personal options.txt'
     assert (backups[0]/'game/home/Fabric 26.3/mods/renamed-renderer.jar').read_bytes() == sodium
     run('merge_game')
     assert len(list((base/'backups').iterdir())) == 1, 'Identical rerun made another backup'
@@ -99,4 +109,4 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     jar(fresh/'home/Fabric 26.3/mods/sodium.jar', 'sodium', '0.9.2+mc26.3')
     run('game="${game%/game}/fresh"; merge_game')
     assert (fresh/'home/Fabric 26.3/mods/sodium.jar').is_file()
-    print('PASS: Sodium disabled by mod ID only with Metal, backup verified, repeat safe; existing profile, settings/skins/saves/accounts preservation, backups, mod deduplication, repeat/fresh install, Java reuse, verified local downloads, symlink rejection')
+    print('PASS: Sodium disabled by mod ID only with Metal, backup verified, repeat safe; existing profile, shared settings applied with backups, skins/saves/accounts preserved, backups, mod deduplication, repeat/fresh install, Java reuse, verified local downloads, symlink rejection')

@@ -227,9 +227,10 @@ merge_game() {
         rel=${src#"$stage/game/"}; dest="$game/$rel"
         applied=$((applied+1))
         if [[ "$((applied % 250))" -eq 1 ]]; then printf 'Applying/reusing game files: %s checked\n' "$applied"; fi
-        # Existing player preferences, skins and worlds belong to this Mac.
+        # Shared config/options replace their prior values with verified backups.
+        # Personal skin artwork and worlds remain on this Mac.
         case "$rel" in
-            home/*/config/*|home/*/options.txt|home/*/CustomSkinLoader/*)
+            home/*/CustomSkinLoader/LocalSkin/*)
                 [[ ! -e "$dest" ]] || continue;;
             home/*/saves/*|home/*/screenshots/*|home/*/logs/*|home/*/servers.dat|home/*/usercache.json)
                 fail "Private data must not be in the setup: $rel";;
@@ -290,7 +291,7 @@ Usage: bash install.sh --check
 
 Installs the pinned Apple Silicon setup into ~/Applications/Minecraft.app and
 ~/Library/Application Support/minecraft. Reuses existing files and preserves
-player settings, skins, accounts and saves. Replaced files are backed up. No sudo, firewall changes, account copying or auto-launch.
+skins, accounts and saves. Shared game/mod settings are applied with backups. No sudo, firewall changes, account copying or auto-launch.
 --dry-run downloads only small manifests into a temporary folder and checks all
 remote URLs with HEAD requests. It does not install files or change settings.
 URL availability is not a checksum check; installation verifies every download.
@@ -489,6 +490,12 @@ fi
 printf 'Applying verified files; preserving player data and backing up replacements…\n'
 backup=''
 merge_game
+if [[ -f "$game/home/Fabric 26.3/shared-launch-settings.json" ]]; then
+    marker="$game/home/Fabric 26.3/.shared-launch-settings.applied"
+    check_destination "$marker"
+    rm -f "$marker"
+    printf 'Shared ZGC and memory settings will be applied on the next launcher start.\n'
+fi
 replace_directory "$stage/runtime" "$support/runtime/java-runtime-epsilon" runtime
 replace_directory "$stage/app/Minecraft.app" "$app" Minecraft.app
 check_destination "$game/home/Fabric 26.3/.setup-release"

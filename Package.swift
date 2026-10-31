@@ -9,7 +9,8 @@ let package = Package(
     targets: [
         .target(name: "MCUIUpdateCore", dependencies: ["ZIPFoundation"],
                 path: "SwiftCraftLauncher/GameFeature/Services/Updates"),
-        .testTarget(name: "MCUIUpdateCoreTests", dependencies: ["MCUIUpdateCore", "ZIPFoundation"],
+        .target(name: "SharedSetupCore", path: "SwiftCraftLauncher/GameFeature/Services/SharedSetup"),
+        .testTarget(name: "MCUIUpdateCoreTests", dependencies: ["MCUIUpdateCore", "ZIPFoundation", "SharedSetupCore"],
                     path: "distribution/tests")
     ]
 )

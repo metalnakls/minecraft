@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import subprocess
 import tarfile
 import zipfile
@@ -14,6 +15,25 @@ HERE = Path(__file__).resolve().parent
 
 def digest(path, algorithm='sha256'):
     return hashlib.file_digest(path.open('rb'), algorithm).hexdigest()
+
+def write_shared_launch_settings(database, working_path, target):
+    # Export selected portable fields only, never the database or full launch command.
+    with sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True) as connection:
+        row = connection.execute(
+            'SELECT data_json FROM game_versions WHERE working_path = ? AND game_name = ?',
+            (str(working_path.resolve()), 'Fabric 26.3')).fetchone()
+    if row is None:
+        raise ValueError('No Fabric 26.3 launcher settings found for this working directory')
+    game = json.loads(row[0])
+    arguments = game.get('jvmArguments', '').split()
+    allowed = {'-XX:+UseZGC', '-XX:+OptimizeStringConcat', '-XX:+OmitStackTraceInFastThrow',
+               '-XX:+UseCompressedOops', '-XX:+UseCompressedClassPointers', '-XX:+UseCompactObjectHeaders'}
+    if '-XX:+UseZGC' not in arguments or any(arg not in allowed for arg in arguments):
+        raise ValueError('Review launch settings: only the approved ZGC/performance flags may be shared')
+    xms, xmx = game['xms'], game['xmx']
+    if not isinstance(xms, int) or not isinstance(xmx, int) or not 0 < xms <= xmx:
+        raise ValueError('Invalid shared memory limits')
+    target.write_text(json.dumps({'schema': 1, 'jvmArguments': ' '.join(arguments), 'xms': xms, 'xmx': xmx}, indent=2) + '\n')
 
 def package_settings(settings, out):
     with tarfile.open(out/'settings.tar.gz', 'w:gz') as tar:
@@ -33,8 +53,10 @@ def render_installer(out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--java-manifest', type=Path, required=True)
+    ap.add_argument('--java-manifest', type=Path)
+    ap.add_argument('--output-directory', type=Path, default=HERE/'release')
     ap.add_argument('--app', type=Path, default=Path('/Applications/Games/Minecraft.app'))
+    ap.add_argument('--launcher-database', type=Path, default=Path.home()/'Library/Application Support/tsmc.minecraft/data/data.db')
     ap.add_argument('--minecraft-root', type=Path, default=Path.home()/'Library/Application Support/minecraft')
     ap.add_argument('--shader-jar', type=Path, help='Use a reproducible shader build instead of the live instance JAR')
     ap.add_argument('--shader-url', help='Pinned shader fork release URL; omitted for local candidate checks')
@@ -42,11 +64,13 @@ def main():
     ap.add_argument('--require-resolved', action='store_true', help='Reject unresolved Modrinth lookups before a release')
     ap.add_argument('--settings-only', action='store_true', help='Refresh settings while preserving all pinned binaries and version metadata')
     args = ap.parse_args()
+    if not args.settings_only and args.java_manifest is None:
+        ap.error('--java-manifest is required unless --settings-only is used')
     ROOT = args.minecraft_root.resolve()
     PROFILE = ROOT/'home/Fabric 26.3'
-    out = HERE / 'release'
+    out = args.output_directory.resolve()
     out.mkdir(exist_ok=True)
-    staging = HERE / 'staging'
+    staging = out / '.staging'
     if staging.exists():
         shutil.rmtree(staging)
     settings = staging / 'settings'
@@ -78,6 +102,7 @@ def main():
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(data)
     shutil.copy2(PROFILE / 'options.txt', target / 'options.txt')
+    write_shared_launch_settings(args.launcher_database, ROOT, target/'shared-launch-settings.json')
     skin_target = target/'CustomSkinLoader'
     skin_target.mkdir()
     shutil.copy2(PROFILE/'CustomSkinLoader/CustomSkinLoader.json', skin_target/'CustomSkinLoader.json')
