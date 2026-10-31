@@ -60,6 +60,18 @@ fetch_row() {
     case "$algorithm" in 1|256) ;; *) fail 'Invalid hash algorithm';; esac
     case "$mode" in 644|755) ;; *) fail 'Invalid permissions';; esac
     [[ "$expected" =~ ^[0-9a-f]+$ ]] || fail 'Invalid digest'
+    # Reuse only installed payloads whose bytes match the pinned manifest.
+    local installed=''
+    case "$path" in
+        game/*) [[ -z "${MC_SETUP_EXISTING_GAME:-}" ]] || installed="$MC_SETUP_EXISTING_GAME/${path#game/}";;
+        runtime/*) [[ -z "${MC_SETUP_EXISTING_RUNTIME:-}" ]] || installed="$MC_SETUP_EXISTING_RUNTIME/${path#runtime/}";;
+    esac
+    if [[ -n "$installed" && -f "$installed" && ! -L "$installed" ]] && [[ "$(hash "$algorithm" "$installed")" == "$expected" ]]; then
+        mkdir -p "$stage/$(dirname "$path")"
+        cp "$installed" "$stage/$path"
+        chmod "$mode" "$stage/$path"
+        return
+    fi
     cached="$cache/$algorithm-$expected"
     if [[ ! -f "$cached" ]] || [[ "$(hash "$algorithm" "$cached")" != "$expected" ]]; then
         tmp=$(mktemp "$cache/transfer.XXXXXX")
@@ -73,6 +85,95 @@ fetch_row() {
     chmod "$mode" "$stage/$path"
 }
 
+# Reject links and file/directory collisions before following destination paths.
+check_destination() {
+    local dest="$1" parent
+    [[ ! -L "$dest" ]] || fail "Destination is a symbolic link: $dest"
+    parent=$(dirname "$dest")
+    while [[ "$parent" != / ]]; do
+        [[ ! -L "$parent" && ( ! -e "$parent" || -d "$parent" ) ]] || fail "Unsafe destination parent: $parent"
+        parent=$(dirname "$parent")
+    done
+}
+ensure_backup() {
+    if [[ -z "${backup:-}" ]]; then
+        mkdir -p "${backup_root:-$base/backups}"
+        backup=$(mktemp -d "${backup_root:-$base/backups}/installation.XXXXXX")
+        printf 'Backing up replaced files in %s\n' "$backup"
+    fi
+}
+backup_file() {
+    local src="$1" rel="$2"
+    ensure_backup
+    mkdir -p "$backup/$(dirname "$rel")"
+    cp -p "$src" "$backup/$rel"
+    cmp -s "$src" "$backup/$rel" || fail "Backup verification failed: $src"
+}
+mod_id() {
+    /usr/bin/unzip -p "$1" fabric.mod.json 2>/dev/null | /usr/bin/plutil -extract id raw -o - - 2>/dev/null
+}
+merge_game() {
+    local src rel dest tmp id other other_id mods="$game/home/Fabric 26.3/mods"
+    # Validate every destination before modifying any game file.
+    while IFS= read -r -d '' src; do
+        rel=${src#"$stage/game/"}; dest="$game/$rel"
+        check_destination "$dest"
+        [[ ! -e "$dest" || -f "$dest" ]] || fail "Expected a file: $dest"
+    done < <(find "$stage/game" -type f -print0)
+    if [[ -d "$mods" ]]; then
+        while IFS= read -r -d '' other; do
+            check_destination "$other"
+            [[ -f "$other" ]] || fail "Expected a mod file: $other"
+        done < <(find "$mods" -maxdepth 1 -name '*.jar' -print0)
+    fi
+    while IFS= read -r -d '' src; do
+        rel=${src#"$stage/game/"}; dest="$game/$rel"
+        # Existing player preferences, skins and worlds belong to this Mac.
+        case "$rel" in
+            home/*/config/*|home/*/options.txt|home/*/CustomSkinLoader/*)
+                [[ ! -e "$dest" ]] || continue;;
+            home/*/saves/*|home/*/screenshots/*|home/*/logs/*|home/*/servers.dat|home/*/usercache.json)
+                fail "Private data must not be in the setup: $rel";;
+        esac
+        case "$rel" in
+            home/*/mods/*.jar)
+                id=$(mod_id "$src") || fail "Cannot identify bundled mod: $rel"
+                for other in "$mods"/*.jar; do
+                    [[ -f "$other" && "$other" != "$dest" ]] || continue
+                    other_id=$(mod_id "$other" || true)
+                    if [[ "$other_id" == "$id" ]]; then
+                        backup_file "$other" "game/${other#"$game/"}"
+                        rm "$other"
+                    fi
+                done;;
+        esac
+        if [[ -f "$dest" ]]; then
+            cmp -s "$src" "$dest" && continue
+            backup_file "$dest" "game/$rel"
+        fi
+        mkdir -p "$(dirname "$dest")"
+        tmp=$(mktemp "$(dirname "$dest")/.setup.XXXXXX")
+        cp -p "$src" "$tmp"
+        mv -f "$tmp" "$dest"
+    done < <(find "$stage/game" -type f -print0)
+}
+replace_directory() {
+    local src="$1" dest="$2" label="$3" previous=''
+    check_destination "$dest"
+    [[ ! -e "$dest" || -d "$dest" ]] || fail "Expected a directory: $dest"
+    if [[ -d "$dest" ]]; then
+        diff -qr "$src" "$dest" >/dev/null && return 0
+        ensure_backup
+        previous="$backup/$label"
+        mv "$dest" "$previous"
+    fi
+    mkdir -p "$(dirname "$dest")"
+    if ! mv "$src" "$dest"; then
+        [[ -z "$previous" ]] || mv "$previous" "$dest"
+        fail "Could not install $dest; previous installation restored."
+    fi
+}
+
 if [[ "${1:-}" == --fetch-row ]]; then shift; fetch_row "$@"; exit; fi
 if [[ "${1:-}" == --probe-row ]]; then shift; probe_row "$@"; exit; fi
 
@@ -83,8 +184,8 @@ Usage: bash install.sh --check
        bash install.sh --local-release /absolute/path/to/release [--dry-run|--download-only]
 
 Installs the pinned Apple Silicon setup into ~/Applications/Minecraft.app and
-~/Library/Application Support/minecraft. Existing game profiles and launchers
-are never overwritten. No sudo, firewall changes, account copying or auto-launch.
+~/Library/Application Support/minecraft. Reuses existing files and preserves
+player settings, skins, accounts and saves. Replaced files are backed up. No sudo, firewall changes, account copying or auto-launch.
 --dry-run downloads only small manifests into a temporary folder and checks all
 remote URLs with HEAD requests. It does not install files or change settings.
 URL availability is not a checksum check; installation verifies every download.
@@ -109,10 +210,21 @@ done
 [[ "$(uname -m)" == arm64 ]] || fail 'This release requires Apple Silicon (M1 or later); Intel needs separate launcher and renderer builds.'
 os=$(/usr/bin/sw_vers -productVersion)
 [[ "${os%%.*}" -ge 15 ]] || fail 'The Metal renderer requires macOS 15 or later.'
-for tool in curl shasum plutil ditto codesign spctl xargs tar; do command -v "$tool" >/dev/null || fail "Missing system tool: $tool"; done
+for tool in curl shasum plutil ditto codesign spctl xargs tar unzip; do command -v "$tool" >/dev/null || fail "Missing system tool: $tool"; done
 game="$HOME/Library/Application Support/minecraft"
 support="$HOME/Library/Application Support/tsmc.minecraft"
+backup_root="$HOME/Library/Application Support/Minecraft-Setup/backups"
 app="$HOME/Applications/Minecraft.app"
+custom=$(/usr/bin/defaults read tsmc.minecraft launcherWorkingDirectory 2>/dev/null || true)
+if [[ -n "$custom" ]]; then
+    [[ "$custom" == /* ]] || fail "Invalid launcher working folder: $custom"
+    game="$custom"
+fi
+for candidate in "$app" /Applications/Games/Minecraft.app /Applications/Minecraft.app; do
+    if [[ -d "$candidate" ]] && [[ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$candidate/Contents/Info.plist" 2>/dev/null || true)" == tsmc.minecraft ]]; then
+        app="$candidate"; break
+    fi
+done
 if [[ "$mode" == check ]]; then
     printf 'Supported Mac: %s, macOS %s\n' "$(uname -m)" "$os"
     for p in "$app" /Applications/Games/Minecraft.app /Applications/Minecraft.app "$game/home/Fabric 26.3" "$support/runtime/java-runtime-epsilon"; do
@@ -194,13 +306,18 @@ if [[ "$mode" == install ]]; then
     if [[ -f "$game/home/Fabric 26.3/.setup-release" ]] && [[ "$(cat "$game/home/Fabric 26.3/.setup-release")" == "$receipt" ]] && [[ -d "$app" ]] && [[ -x "$support/runtime/java-runtime-epsilon/jre.bundle/Contents/Home/bin/java" ]]; then
         printf 'This release is already installed. Your settings and skins are unchanged.\n'; exit
     fi
-    for p in "$game/home/Fabric 26.3" "$app" /Applications/Games/Minecraft.app /Applications/Minecraft.app; do
-        [[ ! -e "$p" ]] || fail "Existing installation at $p. Preserved; use --download-only to stage this release for review."
+    for p in "$game/home/Fabric 26.3" "$support/runtime/java-runtime-epsilon" "$app"; do
+        check_destination "$p"
+        [[ ! -e "$p" || -d "$p" ]] || fail "Expected a directory: $p"
     done
-    custom=$(/usr/bin/defaults read tsmc.minecraft launcherWorkingDirectory 2>/dev/null || true)
-    [[ -z "$custom" || "$custom" == "$game" ]] || fail "Launcher uses a custom working folder: $custom. Preserved."
+    if [[ -e "$app" ]] && [[ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist" 2>/dev/null || true)" != tsmc.minecraft ]]; then
+        fail "Another application occupies $app; it has been preserved."
+    fi
+    printf 'Using installation folder: %s\n' "$game"
 fi
 printf 'Downloading exact Minecraft, Fabric, Java and mod versions (4 parallel transfers)…\n'
+export MC_SETUP_EXISTING_GAME="$game"
+export MC_SETUP_EXISTING_RUNTIME="$support/runtime/java-runtime-epsilon"
 tr '\n' '\0' < "$stage/downloads.tsv" | xargs -0 -P 4 -n 1 /bin/bash "$0" --fetch-row "$release" "$cache" "$stage"
 while IFS=$'\t' read -r path target; do
     [[ -n "$path" ]] || continue
@@ -223,18 +340,10 @@ if [[ "$allow_adhoc" == true ]]; then
 else
     /usr/sbin/spctl --assess --type execute "$stage/app/Minecraft.app" || fail 'This build is not accepted by Gatekeeper. For the deliberately ad-hoc release, rerun with --allow-adhoc. No system security settings are changed.'
 fi
-# Check conflicts before writing any shared libraries or metadata.
-while IFS= read -r -d '' src; do
-    rel=${src#"$stage/game/"}
-    if [[ -e "$game/$rel" ]]; then
-        [[ -f "$game/$rel" && ! -L "$game/$rel" ]] && cmp -s "$src" "$game/$rel" || fail "Existing file differs: $game/$rel"
-    fi
-done < <(find "$stage/game" -type f -print0)
-[[ ! -e "$support/runtime/java-runtime-epsilon" ]] || fail 'A Java runtime already exists. Preserved; review the staged installation first.'
-mkdir -p "$game" "$support/runtime" "$HOME/Applications"
-# The selected instance and app are absent; shared official files were compared above.
-/usr/bin/ditto "$stage/game" "$game"
-mv "$stage/runtime" "$support/runtime/java-runtime-epsilon"
-mv "$stage/app/Minecraft.app" "$app"
+backup=''
+merge_game
+replace_directory "$stage/runtime" "$support/runtime/java-runtime-epsilon" runtime
+replace_directory "$stage/app/Minecraft.app" "$app" Minecraft.app
+check_destination "$game/home/Fabric 26.3/.setup-release"
 printf '%s\n' "$receipt" > "$game/home/Fabric 26.3/.setup-release"
 printf '\nInstalled: %s\nOpen it and add your own player once. Later launches start Minecraft directly.\nUse a different player name from the host.\n' "$app"
