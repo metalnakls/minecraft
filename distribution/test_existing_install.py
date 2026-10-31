@@ -43,6 +43,9 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     jar(profile/'mods/old-name.jar', 'cleanmenu', '0.0.1')
     jar(profile/'mods/unrelated.jar', 'unrelated', '1.0')
     jar(staged/'mods/mcui.jar', 'cleanmenu', '0.1.0')
+    jar(staged/'mods/metal.jar', 'mcopt-metal', '1.2.6-alpha')
+    jar(profile/'mods/renamed-renderer.jar', 'sodium', '0.9.2+mc26.3')
+    sodium = (profile/'mods/renamed-renderer.jar').read_bytes()
     old_mod = (profile/'mods/old-name.jar').read_bytes()
     preserved = {p: p.read_bytes() for p in profile.rglob('*') if p.is_file() and 'mods' not in p.parts}
     run('merge_game')
@@ -50,12 +53,20 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     assert (profile/'config/new.json').read_text() == 'new config'
     assert (profile/'mods/mcui.jar').exists() and not (profile/'mods/old-name.jar').exists()
     assert (profile/'mods/unrelated.jar').exists()
+    assert not (profile/'mods/renamed-renderer.jar').exists(), 'Conflicting Sodium is still enabled'
     backups = list((base/'backups').iterdir())
     assert len(backups) == 1
     assert (backups[0]/'game/home/Fabric 26.3/mods/old-name.jar').read_bytes() == old_mod
     assert (backups[0]/'game/libraries/shared.jar').read_text() == 'old library'
+    assert (backups[0]/'game/home/Fabric 26.3/mods/renamed-renderer.jar').read_bytes() == sodium
     run('merge_game')
     assert len(list((base/'backups').iterdir())) == 1, 'Identical rerun made another backup'
+    # Re-running repairs Sodium added after an otherwise matching installation.
+    jar(profile/'mods/another-name.jar', 'sodium', '0.9.2+mc26.3')
+    result = run('merge_game')
+    assert 'Disabled Sodium' in result.stdout
+    assert not (profile/'mods/another-name.jar').exists()
+    assert any((p/'game/home/Fabric 26.3/mods/another-name.jar').is_file() for p in (base/'backups').iterdir())
     # Different app/runtime is backed up; identical content is reused.
     put(stage/'runtime/bin/java', 'new java')
     put(root/'installed-runtime/bin/java', 'old java')
@@ -83,4 +94,9 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     fresh = root/'fresh'; fresh.mkdir()
     run('game="${game%/game}/fresh"; merge_game')
     assert (fresh/'home/Fabric 26.3/mods/mcui.jar').is_file()
-    print('PASS: existing profile, settings/skins/saves/accounts preservation, backups, mod deduplication, repeat/fresh install, Java reuse, verified local downloads, symlink rejection')
+    # Without Metal Shaders in the setup, Sodium is not changed.
+    (staged/'mods/metal.jar').unlink()
+    jar(fresh/'home/Fabric 26.3/mods/sodium.jar', 'sodium', '0.9.2+mc26.3')
+    run('game="${game%/game}/fresh"; merge_game')
+    assert (fresh/'home/Fabric 26.3/mods/sodium.jar').is_file()
+    print('PASS: Sodium disabled by mod ID only with Metal, backup verified, repeat safe; existing profile, settings/skins/saves/accounts preservation, backups, mod deduplication, repeat/fresh install, Java reuse, verified local downloads, symlink rejection')

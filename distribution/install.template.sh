@@ -240,9 +240,12 @@ merge_game() {
                 for other in "$mods"/*.jar; do
                     [[ -f "$other" && "$other" != "$dest" ]] || continue
                     other_id=$(mod_id "$other" || true)
-                    if [[ "$other_id" == "$id" ]]; then
+                    if [[ "$other_id" == "$id" || ( "$id" == mcopt-metal && "$other_id" == sodium ) ]]; then
                         backup_file "$other" "game/${other#"$game/"}"
                         rm "$other"
+                        if [[ "$other_id" == sodium && "$id" == mcopt-metal ]]; then
+                            printf 'Disabled Sodium (incompatible with Metal Shaders): %s\nBackup: %s/game/%s\n' "$other" "$backup" "${other#"$game/"}"
+                        fi
                     fi
                 done;;
         esac
