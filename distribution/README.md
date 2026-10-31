@@ -20,6 +20,10 @@ bash release/install.sh --local-release "$PWD/release" --dry-run
 
 The builder reads only approved config files, options, skin PNGs, active mod JARs and version metadata. **It never reads or packages saves.** Accounts, launcher preferences/databases, server lists, screenshots, logs, controller identities and world/map caches are excluded. Generated machine-specific bundles, inventories, build output and resolved locks are gitignored.
 
+To refresh current settings in an already prepared release, add `--settings-only` to `prepare.py`. This preserves the pinned binaries, download lock and version metadata while regenerating the settings archive, installer hashes and checksums.
+
+The deliberately ad-hoc signed launcher can be installed with `--allow-adhoc`. This retains hash and signature checks, but does not require a Developer ID identity or notarization. It does not locally notarize, re-sign downloaded code, remove quarantine or disable Gatekeeper. macOS may still require the user to approve the app with Open Anyway. The app is already ad-hoc signed at build time, so signing it again on the recipient's device is unnecessary.
+
 For LAN skins, install both players' PNGs on both Macs:
 
 ```sh

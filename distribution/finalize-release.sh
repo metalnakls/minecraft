@@ -1,16 +1,23 @@
 #!/bin/bash
 set -euo pipefail
+allow_adhoc=false
+if [[ "${1:-}" == --allow-adhoc ]]; then allow_adhoc=true; shift; fi
 if [[ $# -ne 4 ]]; then
-    echo 'Usage: finalize-release.sh SIGNED_STAPLED_APP JAVA_MANIFEST SHADER_JAR PINNED_SHADER_HTTPS_URL' >&2
+    echo 'Usage: finalize-release.sh [--allow-adhoc] APP JAVA_MANIFEST SHADER_JAR PINNED_SHADER_HTTPS_URL' >&2
     exit 1
 fi
 here=$(cd "$(dirname "$0")" && pwd)
 app="$1"
 case "$4" in https://github.com/metalnakls/minecraftmetalshaders/releases/download/*) ;; *) echo 'Use a pinned shader fork release asset URL.' >&2; exit 1;; esac
 codesign --verify --deep --strict "$app"
-codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Application:' || { echo 'Developer ID Application signature is required for distribution.' >&2; exit 1; }
-xcrun stapler validate "$app"
-/usr/sbin/spctl --assess --type execute "$app"
+if [[ "$allow_adhoc" == true ]]; then
+    codesign -dv "$app" 2>&1 | grep -q '^Signature=adhoc$' || { echo 'Expected an ad-hoc signed app.' >&2; exit 1; }
+    echo 'Preparing the explicitly selected ad-hoc release; no Apple notarization.'
+else
+    codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Application:' || { echo 'Developer ID Application signature is required for this mode.' >&2; exit 1; }
+    xcrun stapler validate "$app"
+    /usr/sbin/spctl --assess --type execute "$app"
+fi
 python3 "$here/prepare.py" --app "$app" --java-manifest "$2" --shader-jar "$3" \
   --shader-url "$4" --bundled-mod 'macos-input-fixes-1.13+26.3.jar' --require-resolved
 git -C "$here/.." archive --format=tar.gz --prefix=minecraft-source/ -o "$here/release/launcher-source.tar.gz" HEAD

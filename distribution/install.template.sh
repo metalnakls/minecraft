@@ -88,13 +88,17 @@ are never overwritten. No sudo, firewall changes, account copying or auto-launch
 --dry-run downloads only small manifests into a temporary folder and checks all
 remote URLs with HEAD requests. It does not install files or change settings.
 URL availability is not a checksum check; installation verifies every download.
+--allow-adhoc explicitly permits the ad-hoc signed release without requiring
+Apple notarization. Hash and signature checks remain mandatory. This does not
+notarize locally, remove quarantine, or change Gatekeeper settings.
 EOF
 }
-release=''; mode=install
+release=''; mode=install; allow_adhoc=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --check) mode=check; shift;;
         --dry-run) mode=dry; shift;;
+        --allow-adhoc) allow_adhoc=true; shift;;
         --download-only) mode=download; shift;;
         --release|--local-release) [[ $# -gt 1 ]] || fail 'Missing release location'; release="$2"; shift 2;;
         --help|-h) usage; exit;;
@@ -213,7 +217,12 @@ tar -xzf "$stage/settings.tar.gz" -C "$stage"
 if [[ "$mode" == download ]]; then
     printf 'Downloaded and verified. Staged setup: %s\nNo installed files were changed.\n' "$stage"; exit
 fi
-/usr/sbin/spctl --assess --type execute "$stage/app/Minecraft.app" || fail 'The launcher needs Developer ID signing and notarization before unattended installation. The installer does not bypass Gatekeeper.'
+if [[ "$allow_adhoc" == true ]]; then
+    /usr/bin/codesign -dv "$stage/app/Minecraft.app" 2>&1 | grep -q '^Signature=adhoc$' || fail 'Expected the explicitly selected ad-hoc build.'
+    printf 'Installing an ad-hoc signed build: no Developer ID or Apple notarization. macOS may require Open Anyway.\n'
+else
+    /usr/sbin/spctl --assess --type execute "$stage/app/Minecraft.app" || fail 'This build is not accepted by Gatekeeper. For the deliberately ad-hoc release, rerun with --allow-adhoc. No system security settings are changed.'
+fi
 # Check conflicts before writing any shared libraries or metadata.
 while IFS= read -r -d '' src; do
     rel=${src#"$stage/game/"}

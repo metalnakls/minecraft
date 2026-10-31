@@ -2,6 +2,8 @@
 
 The source preparation and finalization scripts are local-only. Publishing is a separate, explicitly approved action.
 
+For the ad-hoc distribution route, keep the project's valid ad-hoc signature and pass `--allow-adhoc` to `finalize-release.sh` and the recipient's installer. Steps 2–3 below apply only to Developer ID distribution. Ad-hoc signing needs no paid account, but it does not provide Apple notarization or publisher identity verification. The scripts do not change macOS security policy.
+
 1. Build the committed launcher with `build-launcher.sh /absolute/output-directory`. Build the committed shader revision in an isolated checkout with its Gradle wrapper and JDK 25. Keep the corresponding source archives and revision IDs.
 2. Prepare a Developer ID Application signed launcher with Hardened Runtime. This launcher embeds Java in its process, so its distribution entitlements must support HotSpot JIT and loading independently signed Java/mod native libraries. Sign nested Sparkle executables, XPC services, helper apps and frameworks inside-out before the main app; preserve each component's appropriate entitlements. Do not use `codesign --deep` for signing.
 3. When external notarization is authorized, submit with `xcrun notarytool`, inspect the result, and staple the accepted ticket. No notarization upload is performed by these scripts.
