@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>minecraft</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #fff;
+  }
+  .command { position: relative; }
+  .feedback {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    margin-top: 12px;
+    text-align: center;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #888;
+  }
+  pre {
+    margin: 0;
+    max-width: calc(100vw - 48px);
+    overflow-x: auto;
+    font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #888;
+    cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #000; }
+    pre, .feedback { color: #666; }
+  }
+</style>
+</head>
+<body>
+  <div class="command">
+    <pre tabindex="0" role="button" aria-label="Copy install command">curl -fsSL https://metalnakls.github.io/minecraft/install.sh | sh</pre>
+    <span class="feedback" role="status"></span>
+  </div>
+  <script>
+    const command = document.querySelector('pre');
+    const feedback = document.querySelector('.feedback');
+    let reset;
+    let bounce;
+    async function copyCommand(event) {
+      clearTimeout(reset);
+      bounce?.cancel();
+      if (event?.type === 'click' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        bounce = command.animate([
+          { transform: 'translateY(0) scale(1)', offset: 0 },
+          { transform: 'translateY(1px) scale(.98)', offset: .2 },
+          { transform: 'translateY(-3px) scale(1.01)', offset: .55 },
+          { transform: 'translateY(0) scale(1)', offset: 1 }
+        ], { duration: 280, easing: 'cubic-bezier(.2, .8, .2, 1)' });
+      }
+      try {
+        await navigator.clipboard.writeText(command.textContent);
+        feedback.textContent = 'copied';
+      } catch {
+        feedback.textContent = 'couldn’t copy — try again';
+      }
+      reset = setTimeout(() => { feedback.textContent = ''; }, 2000);
+    }
+    command.addEventListener('click', copyCommand);
+    command.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        copyCommand();
+      }
+    });
+  </script>
+</body>
+</html>
