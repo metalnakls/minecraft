@@ -4,6 +4,10 @@ This tooling prepares a pinned Minecraft 26.3 / Fabric 0.19.5 setup for Apple Si
 
 The recipient needs only built-in macOS tools. Preparation uses Python 3, Git, and Xcode. Downloaded Minecraft, Java, Fabric and third-party mods stay on their original hosts. The launcher, forked shader build, settings snapshot and explicitly selected locally modified mods become release assets.
 
+Launcher 1.3.6 checks `metalnakls/MCUI` for stable updates before every game launch, enabled by default. It verifies GitHub's SHA-256 digest and the Fabric dependency predicates, backs up the installed JAR under `.mcui-backups`, then atomically replaces that same filename before Java starts. Settings and saves are untouched. Offline, incompatible or unverified updates leave the existing mod installed. Other mods and shaders remain pinned.
+
+Hold Option while opening Minecraft to show the launcher, then use Settings → General → Update MCUI automatically to turn checks off. No update code runs in other launchers. Run `swift test` from the repository root for isolated updater tests; `MCUI_LIVE_TEST=1 swift test --filter liveGitHubUpdateInTemporaryInstance` tests the public release in a temporary instance without starting Minecraft.
+
 ```sh
 python3 prepare.py --java-manifest /path/to/java-runtime-manifest.json \
   --app /path/to/Minecraft.app \

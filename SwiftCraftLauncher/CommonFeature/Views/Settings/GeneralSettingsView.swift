@@ -35,6 +35,8 @@ public struct GeneralSettingsView: View {
             .environment(container.ui.generalSettingsManager)
             spacerView()
             GeneralSettingsSystemProxyRow()
+            GeneralSettingsMCUIUpdatesRow()
+                .environment(container.ui.generalSettingsManager)
             GeneralSettingsCommonSheetHeightLimitRow()
                 .environment(container.ui.generalSettingsManager)
         }

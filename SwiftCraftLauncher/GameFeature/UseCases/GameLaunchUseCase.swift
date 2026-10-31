@@ -17,6 +17,17 @@ final class GameLaunchUseCase {
     ///   - player: The current player.
     ///   - game: The game version to launch.
     func launchGame(player: Player, game: GameVersionInfo) async {
+        if game.modLoader.lowercased() == "fabric" {
+            let settings = DIContainer.shared.ui.generalSettingsManager
+            let minecraft = game.gameVersion.hasPrefix("Fabric ") ? String(game.gameVersion.dropFirst(7)) : game.gameVersion
+            let outcome = await MCUIUpdater.shared.check(
+                profile: AppPaths.profileDirectory(gameName: game.gameName),
+                minecraft: minecraft, loader: game.modVersion, java: game.javaVersion,
+                enabled: settings.autoUpdateMCUI
+            )
+            settings.mcuiUpdateStatus = outcome.message
+            AppLog.game.info("\(outcome.message)")
+        }
         var launchGame = game
         if !DIContainer.shared.system.javaManager.canJavaRun(at: launchGame.javaPath),
            let component = launchGame.javaRuntimeComponent {

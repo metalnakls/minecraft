@@ -8,6 +8,16 @@
 import AppKit
 import SwiftUI
 
+struct GeneralSettingsMCUIUpdatesRow: View {
+    @Environment(GeneralSettingsManager.self) private var settings
+
+    var body: some View {
+        @Bindable var settings = settings
+        Toggle("Update MCUI automatically", isOn: $settings.autoUpdateMCUI)
+        CommonDescriptionText(text: "Checks compatible GitHub releases before each game launch. Last check: \(settings.mcuiUpdateStatus)")
+    }
+}
+
 /// A row that displays the current language and opens system language settings.
 struct GeneralSettingsLanguageRow: View {
     let languageManager: LanguageManager

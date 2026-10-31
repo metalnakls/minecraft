@@ -22,6 +22,11 @@ public enum InterfaceLayoutStyle: String, CaseIterable {
 /// Manages general application settings including downloads and layout preferences.
 @Observable
 final class GeneralSettingsManager {
+    var autoUpdateMCUI: Bool = Defaults.loadBool(forKey: AppConstants.UserDefaultsKeys.autoUpdateMCUI, defaultValue: true) {
+        didSet { Defaults.save(autoUpdateMCUI, forKey: AppConstants.UserDefaultsKeys.autoUpdateMCUI) }
+    }
+    var mcuiUpdateStatus = "Not checked yet."
+
     var limitCommonSheetHeight: Bool = Defaults.loadBool(forKey: AppConstants.UserDefaultsKeys.limitCommonSheetHeight) {
         didSet { Defaults.save(limitCommonSheetHeight, forKey: AppConstants.UserDefaultsKeys.limitCommonSheetHeight) }
     }

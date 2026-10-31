@@ -48,6 +48,7 @@ enum AppConstants {
         static let concurrentDownloads = "concurrentDownloads"
         static let launcherWorkingDirectory = "launcherWorkingDirectory"
         static let interfaceLayoutStyle = "interfaceLayoutStyle"
+        static let autoUpdateMCUI = "autoUpdateMCUI"
         static let defaultModPackExportFormat = "defaultModPackExportFormat"
         static let acknowledgedAnnouncementVersion = "acknowledgedAnnouncementVersion"
         static let themeMode = "themeMode"
