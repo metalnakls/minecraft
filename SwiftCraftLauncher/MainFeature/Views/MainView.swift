@@ -60,6 +60,14 @@ struct MainView: View {
             )
             await loadInitialAppData()
         }
+        .task(id: playerListViewModel.currentPlayer?.id) {
+            guard MinecraftMain.awaitingPlayerSetup,
+                  let player = playerListViewModel.currentPlayer else { return }
+            await gameRepository.loadInitialDataIfNeeded()
+            guard !Task.isCancelled, let game = gameRepository.games.first else { return }
+            MinecraftMain.awaitingPlayerSetup = false
+            await gameLaunchUseCase.launchGame(player: player, game: game)
+        }
         .mainViewPresentations(container: container, detailState: detailState)
         .gameCrashAlert()
         .frame(minWidth: 900, minHeight: 500)

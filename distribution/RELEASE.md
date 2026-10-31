@@ -23,3 +23,5 @@ MCUI's launch-time updater is enabled by default in launcher 1.3.6+. Future stab
 Do not publish generated settings or player skin files without reviewing them. Saves and credentials are excluded by the builder, but the chosen controls, visual preferences and skin artwork are intentional shared content.
 
 Launcher 1.3.7 adds shader checks before each launch, verifying the fork asset digest, mod ID, dependencies and declared conflicts. Alpha version numbers and Fabric tilde ranges are supported. Settings and saves are preserved.
+
+Before publishing an archive, run `bash distribution/verify-launcher.sh APP JAVA_EXECUTABLE`. This starts Java through the actual release executable and checks the layered Icon Composer variants. Java re-enters the executable through `dlsym("main")`; Release must export `_main` and use `STRIP_STYLE = non-global`. A successful archive or an unstripped debug run alone does not verify this path.

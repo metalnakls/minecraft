@@ -15,5 +15,8 @@ xcodebuild -project SwiftCraftLauncher.xcodeproj -scheme SwiftCraftLauncher \
   -onlyUsePackageVersionsFromResolvedFile -skipPackageUpdates -skipPackagePluginValidation \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES archive > "$out/build.log" 2>&1
 codesign --verify --deep --strict "$out/Minecraft.xcarchive/Products/Applications/Minecraft.app"
+xcrun dyld_info -exports "$out/Minecraft.xcarchive/Products/Applications/Minecraft.app/Contents/MacOS/Minecraft" | grep ' _main$' >/dev/null || {
+  echo 'Archive stripped the main entrypoint required by Java.' >&2; exit 1;
+}
 git archive --format=tar.gz --prefix=minecraft-source/ -o "$out/launcher-source.tar.gz" HEAD
 printf 'Local archive: %s\nBuild log: %s\n' "$out/Minecraft.xcarchive" "$out/build.log"

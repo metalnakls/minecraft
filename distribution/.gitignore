@@ -6,3 +6,5 @@ resolved-mods.json
 java-runtime-manifest.json
 __pycache__/
 !*.sh
+
+!verify-launcher.sh

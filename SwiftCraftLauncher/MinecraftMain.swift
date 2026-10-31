@@ -5,8 +5,27 @@ import Foundation
 @main
 @MainActor
 enum MinecraftMain {
+    static var awaitingPlayerSetup = false
+
     static func main() {
         NativeJavaRuntime.resumeLauncherThreadIfNeeded()
+        // Exercise the shipped executable's JLI entrypoint without loading a profile.
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--verify-java" {
+            _ = NSApplication.shared
+            NativeJavaRuntime.preparingAtStartup = true
+            do {
+                try NativeJavaRuntime.launch(
+                    javaExecutable: CommandLine.arguments[2], arguments: ["-version"],
+                    workingDirectory: FileManager.default.temporaryDirectory, environment: [:]
+                )
+                NativeJavaRuntime.preparingAtStartup = false
+                NativeJavaRuntime.runPreparedGameIfNeeded()
+            } catch {
+                print("Java handoff failed: \(error.localizedDescription)")
+                exit(1)
+            }
+            return
+        }
         if !NSEvent.modifierFlags.contains(.option),
            !CommandLine.arguments.contains("--launcher") {
             _ = NSApplication.shared
@@ -14,6 +33,7 @@ enum MinecraftMain {
             Task { @MainActor in
                 let players = PlayerListViewModel()
                 players.loadPlayersIfNeeded()
+                awaitingPlayerSetup = players.currentPlayer == nil
                 let repository = GameRepository()
                 await repository.loadInitialDataIfNeeded()
                 if let player = players.currentPlayer, let game = repository.games.first {
