@@ -10,8 +10,8 @@ private func hash(_ data: Data) -> String {
     SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
 }
 
-private func jar(version: String, minecraft: String = "26.3", id: String = "cleanmenu") throws -> Data {
-    let manifest: [String: Any] = ["id": id, "version": version, "depends": [
+private func jar(version: String, minecraft: String = "26.3", id: String = "cleanmenu", breaks: [String: String] = [:]) throws -> Data {
+    let manifest: [String: Any] = ["id": id, "version": version, "breaks": breaks, "depends": [
         "minecraft": minecraft, "fabricloader": ">=0.19.5", "java": ">=25", "modmenu": "*"
     ]]
     let data = try JSONSerialization.data(withJSONObject: manifest)
@@ -143,7 +143,8 @@ func rejectedUpdatePreservesInstalledBytes(reason: String) async throws {
     #expect(MCUIUpdater.matches("26.3", requirement: ">=26.3 <26.4"))
     #expect(!MCUIUpdater.matches("26.4", requirement: ">=26.3 <26.4"))
     #expect(MCUIUpdater.matches("26.3.1", requirement: "26.3.x"))
-    #expect(!MCUIUpdater.matches("26.3", requirement: "~26.3"))
+    #expect(MCUIUpdater.matches("26.3", requirement: "~26.3"))
+    #expect(!MCUIUpdater.matches("26.4", requirement: "~26.3"))
     #expect(!MCUIUpdater.matches("0.19.5", requirement: ">=0.20.0"))
 }
 
@@ -155,4 +156,41 @@ func liveGitHubUpdateInTemporaryInstance() async throws {
     let outcome = await fixture.check(updater)
     if case .updated = outcome {} else { Issue.record("Live update did not complete: \(outcome.message)") }
     #expect(try Data(contentsOf: fixture.installed) != fixture.original)
+}
+
+@Test(arguments: ["success", "checksum", "incompatible", "wrongID", "older", "offline", "conflict"])
+func shaderUpdatesUseSameVerificationAndBackups(reason: String) async throws {
+    let fixture = try Fixture(); defer { fixture.remove() }
+    try FileManager.default.removeItem(at: fixture.installed)
+    let path = fixture.root.appendingPathComponent("mods/metal-shaders.jar")
+    let original = try jar(version: "1.2.6-alpha", minecraft: "~26.3", id: "mcopt-metal")
+    try original.write(to: path)
+    let payload = try jar(version: reason == "older" ? "1.2.5-alpha" : "1.2.7-alpha", minecraft: reason == "incompatible" ? "~26.4" : "~26.3", id: reason == "wrongID" ? "wrong" : "mcopt-metal", breaks: reason == "conflict" ? ["sodium": "*"] : [:])
+    var objects = try #require(JSONSerialization.jsonObject(with: releases(payload)) as? [[String: Any]])
+    objects[0]["assets"] = [["name": "metal-shaders-1.2.7-alpha.jar", "size": payload.count,
+                             "digest": "sha256:" + (reason == "checksum" ? String(repeating: "0", count: 64) : hash(payload)),
+                             "browser_download_url": "https://github.com/metalnakls/minecraftmetalshaders/releases/download/v1.2.7/metal-shaders-1.2.7-alpha.jar"]]
+    let metadata = try JSONSerialization.data(withJSONObject: objects)
+    if reason == "conflict" { try jar(version: "1.0", id: "sodium").write(to: fixture.root.appendingPathComponent("mods/sodium.jar")) }
+    let updater = MCUIUpdater(mod: .shaders, fetch: { url in
+        #expect(url.absoluteString.contains("metalnakls/minecraftmetalshaders/"))
+        if reason == "offline" { throw URLError(.notConnectedToInternet) }
+        return url.host == "api.github.com" ? metadata : payload
+    })
+    let outcome = await fixture.check(updater)
+    if reason == "success" {
+        #expect(outcome == .updated("1.2.7-alpha"))
+        #expect(try Data(contentsOf: fixture.root.appendingPathComponent(".shader-backups/" + hash(original) + ".jar")) == original)
+    } else {
+        if case .updated = outcome { Issue.record("Rejected shader was installed") }
+        #expect(try Data(contentsOf: path) == original)
+    }
+}
+
+@Test(.enabled(if: ProcessInfo.processInfo.environment["MCUI_LIVE_TEST"] == "1"))
+func liveShaderGitHubUpdateInTemporaryInstance() async throws {
+    let fixture = try Fixture(); defer { fixture.remove() }
+    try jar(version: "0.0.1-alpha", id: "mcopt-metal").write(to: fixture.installed)
+    let outcome = await fixture.check(MCUIUpdater(mod: .shaders))
+    if case .updated = outcome {} else { Issue.record("Live shader update failed: \(outcome.message)") }
 }

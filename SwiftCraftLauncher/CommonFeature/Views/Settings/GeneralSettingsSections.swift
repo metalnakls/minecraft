@@ -15,6 +15,8 @@ struct GeneralSettingsMCUIUpdatesRow: View {
         @Bindable var settings = settings
         Toggle("Update MCUI automatically", isOn: $settings.autoUpdateMCUI)
         CommonDescriptionText(text: "Checks compatible GitHub releases before each game launch. Last check: \(settings.mcuiUpdateStatus)")
+        Toggle("Update Metal Shaders automatically", isOn: $settings.autoUpdateShaders)
+        CommonDescriptionText(text: "Checks your GitHub fork before each game launch. Last check: \(settings.shaderUpdateStatus)")
     }
 }
 

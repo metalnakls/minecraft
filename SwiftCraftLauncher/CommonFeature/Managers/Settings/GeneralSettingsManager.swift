@@ -26,6 +26,10 @@ final class GeneralSettingsManager {
         didSet { Defaults.save(autoUpdateMCUI, forKey: AppConstants.UserDefaultsKeys.autoUpdateMCUI) }
     }
     var mcuiUpdateStatus = "Not checked yet."
+    var autoUpdateShaders: Bool = Defaults.loadBool(forKey: AppConstants.UserDefaultsKeys.autoUpdateShaders, defaultValue: true) {
+        didSet { Defaults.save(autoUpdateShaders, forKey: AppConstants.UserDefaultsKeys.autoUpdateShaders) }
+    }
+    var shaderUpdateStatus = "Not checked yet."
 
     var limitCommonSheetHeight: Bool = Defaults.loadBool(forKey: AppConstants.UserDefaultsKeys.limitCommonSheetHeight) {
         didSet { Defaults.save(limitCommonSheetHeight, forKey: AppConstants.UserDefaultsKeys.limitCommonSheetHeight) }

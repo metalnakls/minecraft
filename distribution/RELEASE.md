@@ -18,6 +18,8 @@ Proposed repository split:
 
 The one-command install downloads the versioned script to a temporary file and then runs it with the same pinned release URL. It does not pipe into bash because download workers need a real script path. Add `--dry-run` to check availability without installation.
 
-MCUI's launch-time updater is enabled by default in launcher 1.3.6+. Future stable MCUI releases should contain `mcui-VERSION.jar`, with an incremented version and accurate dependency predicates in `fabric.mod.json`; GitHub supplies the asset SHA-256 digest. No separate update manifest is required. Unsupported dependency expressions are rejected rather than assumed compatible. Shader and other mod updates are not automatic.
+MCUI's launch-time updater is enabled by default in launcher 1.3.6+. Future stable MCUI releases should contain `mcui-VERSION.jar`, with an incremented version and accurate dependency predicates in `fabric.mod.json`; GitHub supplies the asset SHA-256 digest. No separate update manifest is required. Unsupported dependency expressions are rejected rather than assumed compatible. Metal Shaders uses the same checks against metalnakls/minecraftmetalshaders, with backups in .shader-backups. Both toggles default to on; other mods remain pinned.
 
 Do not publish generated settings or player skin files without reviewing them. Saves and credentials are excluded by the builder, but the chosen controls, visual preferences and skin artwork are intentional shared content.
+
+Launcher 1.3.7 adds shader checks before each launch, verifying the fork asset digest, mod ID, dependencies and declared conflicts. Alpha version numbers and Fabric tilde ranges are supported. Settings and saves are preserved.

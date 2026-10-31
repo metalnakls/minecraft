@@ -27,6 +27,13 @@ final class GameLaunchUseCase {
             )
             settings.mcuiUpdateStatus = outcome.message
             AppLog.game.info("\(outcome.message)")
+            let shaderOutcome = await MCUIUpdater.shaders.check(
+                profile: AppPaths.profileDirectory(gameName: game.gameName),
+                minecraft: minecraft, loader: game.modVersion, java: game.javaVersion,
+                enabled: settings.autoUpdateShaders
+            )
+            settings.shaderUpdateStatus = shaderOutcome.message(for: "Metal Shaders")
+            AppLog.game.info("\(settings.shaderUpdateStatus)")
         }
         var launchGame = game
         if !DIContainer.shared.system.javaManager.canJavaRun(at: launchGame.javaPath),

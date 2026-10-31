@@ -4,7 +4,7 @@ This tooling prepares a pinned Minecraft 26.3 / Fabric 0.19.5 setup for Apple Si
 
 The recipient needs only built-in macOS tools. Preparation uses Python 3, Git, and Xcode. Downloaded Minecraft, Java, Fabric and third-party mods stay on their original hosts. The launcher, forked shader build, settings snapshot and explicitly selected locally modified mods become release assets.
 
-Launcher 1.3.6 checks `metalnakls/MCUI` for stable updates before every game launch, enabled by default. It verifies GitHub's SHA-256 digest and the Fabric dependency predicates, backs up the installed JAR under `.mcui-backups`, then atomically replaces that same filename before Java starts. Settings and saves are untouched. Offline, incompatible or unverified updates leave the existing mod installed. Other mods and shaders remain pinned.
+Launcher 1.3.6 checks `metalnakls/MCUI` for stable updates before every game launch, enabled by default. It verifies GitHub's SHA-256 digest and the Fabric dependency predicates, backs up the installed JAR under `.mcui-backups`, then atomically replaces that same filename before Java starts. Settings and saves are untouched. Offline, incompatible or unverified updates leave the existing mod installed. Other mods remain pinned.
 
 Hold Option while opening Minecraft to show the launcher, then use Settings → General → Update MCUI automatically to turn checks off. No update code runs in other launchers. Run `swift test` from the repository root for isolated updater tests; `MCUI_LIVE_TEST=1 swift test --filter liveGitHubUpdateInTemporaryInstance` tests the public release in a temporary instance without starting Minecraft.
 
@@ -37,3 +37,5 @@ bash install-skin.sh ExactPlayerName /path/to/skin.png
 Use distinct player names, repeat for each player and restart Minecraft. The skins go into `CustomSkinLoader/LocalSkin/skins` in the `Fabric 26.3` profile. Local skins are not automatically sent to other players.
 
 Test the real downloader's handling of a dropped TLS handshake with `python3 test_transport.py`. It creates an ephemeral localhost certificate trusted only by the test process; it changes no system trust or proxy settings. It proves the original downloader fails and the updated downloader retries and checks the file hash.
+
+Launcher 1.3.7 adds shader checks before each launch, verifying the fork asset digest, mod ID, dependencies and declared conflicts. Alpha version numbers and Fabric tilde ranges are supported. Settings and saves are preserved.

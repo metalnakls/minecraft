@@ -2,22 +2,32 @@ import CryptoKit
 import Foundation
 import ZIPFoundation
 
-/// Checks only installed MCUI copies, before Java opens the instance's mod JARs.
+/// Checks installed managed mod copies, before Java opens the instance's mod JARs.
 actor MCUIUpdater {
     static let shared = MCUIUpdater()
+    static let shaders = MCUIUpdater(mod: .shaders)
+
+    enum Mod: Sendable {
+        case mcui, shaders
+        var repository: String { self == .mcui ? "metalnakls/MCUI" : "metalnakls/minecraftmetalshaders" }
+        var id: String { self == .mcui ? "cleanmenu" : "mcopt-metal" }
+        var prefix: String { self == .mcui ? "mcui-" : "metal-shaders-" }
+        var backups: String { self == .mcui ? ".mcui-backups" : ".shader-backups" }
+    }
     typealias Fetch = @Sendable (URL) async throws -> Data
 
     enum Outcome: Equatable, Sendable {
         case disabled, absent, unchanged
         case updated(String), kept(String)
 
-        var message: String {
+        var message: String { message(for: "MCUI") }
+        func message(for name: String) -> String {
             switch self {
-            case .disabled: "Automatic MCUI updates are off."
-            case .absent: "MCUI is not installed in this instance."
-            case .unchanged: "No newer compatible MCUI release found."
-            case let .updated(version): "Updated MCUI to \(version)."
-            case let .kept(reason): "Kept installed MCUI: \(reason)"
+            case .disabled: "Automatic \(name) updates are off."
+            case .absent: "\(name) is not installed in this instance."
+            case .unchanged: "No newer compatible \(name) release found."
+            case let .updated(version): "Updated \(name) to \(version)."
+            case let .kept(reason): "Kept installed \(name): \(reason)"
             }
         }
     }
@@ -55,6 +65,7 @@ actor MCUIUpdater {
         let id: String
         let version: String
         let depends: [String: Requirement]?
+        let breaks: [String: Requirement]?
     }
 
     private enum UpdateError: Error, LocalizedError {
@@ -64,10 +75,12 @@ actor MCUIUpdater {
         }
     }
 
+    private let mod: Mod
     private let fetch: Fetch
     private var inFlight: [URL: Task<Outcome, Never>] = [:]
 
-    init(fetch: Fetch? = nil) {
+    init(mod: Mod = .mcui, fetch: Fetch? = nil) {
+        self.mod = mod
         self.fetch = fetch ?? Self.download
     }
 
@@ -96,14 +109,14 @@ actor MCUIUpdater {
             guard values.isRegularFile == true, values.isSymbolicLink != true,
                   let manifest = try? Self.manifest(Archive(url: url, accessMode: .read)) else { continue }
             versions[manifest.id] = manifest.version
-            if manifest.id == "cleanmenu" { installed.append((url, manifest)) }
+            if manifest.id == mod.id { installed.append((url, manifest)) }
         }
         guard !installed.isEmpty else { return .absent }
-        guard installed.count == 1 else { throw UpdateError.invalid("multiple MCUI JARs are installed") }
+        guard installed.count == 1 else { throw UpdateError.invalid("multiple managed mod JARs are installed") }
         let (destination, current) = installed[0]
         let original = try Data(contentsOf: destination)
         let originalHash = Self.hash(original)
-        let listURL = URL(string: "https://api.github.com/repos/metalnakls/MCUI/releases?per_page=100")!
+        let listURL = URL(string: "https://api.github.com/repos/\(mod.repository)/releases?per_page=100")!
         let list = try await fetch(listURL)
         guard list.count <= 4_000_000 else { throw UpdateError.invalid("release metadata is too large") }
         let releases = try JSONDecoder().decode([Release].self, from: list)
@@ -112,8 +125,8 @@ actor MCUIUpdater {
         let deadline = Date().addingTimeInterval(20)
         for release in releases {
             guard Date() < deadline else { throw UpdateError.invalid("update check timed out") }
-            guard let asset = release.assets.first(where: { $0.name.hasPrefix("mcui-") && $0.name.hasSuffix(".jar") }),
-                  asset.browser_download_url.absoluteString.hasPrefix("https://github.com/metalnakls/MCUI/releases/download/"),
+            guard let asset = release.assets.first(where: { $0.name.hasPrefix(mod.prefix) && $0.name.hasSuffix(".jar") }),
+                  asset.browser_download_url.absoluteString.hasPrefix("https://github.com/\(mod.repository)/releases/download/"),
                   asset.size > 0, asset.size <= 20_000_000,
                   let digest = asset.digest, digest.hasPrefix("sha256:") else { continue }
             let expected = String(digest.dropFirst(7)).lowercased()
@@ -124,18 +137,19 @@ actor MCUIUpdater {
                 throw UpdateError.invalid("download checksum does not match GitHub")
             }
             let candidate = try Self.manifest(Archive(data: data, accessMode: .read))
-            guard candidate.id == "cleanmenu",
+            guard candidate.id == mod.id,
                   let comparison = Self.compare(candidate.version, current.version), comparison > 0,
                   let dependencies = candidate.depends,
                   dependencies["minecraft"] != nil,
-                  dependencies.allSatisfy({ id, requirement in versions[id].map(requirement.matches) ?? false }) else { continue }
+                  dependencies.allSatisfy({ id, requirement in versions[id].map(requirement.matches) ?? false }),
+                  !(candidate.breaks ?? [:]).contains(where: { id, requirement in versions[id].map(requirement.matches) ?? false }) else { continue }
             try Task.checkCancellation()
             let values = try destination.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
             guard values.isRegularFile == true, values.isSymbolicLink != true,
                   Self.hash(try Data(contentsOf: destination)) == originalHash else {
                 throw UpdateError.invalid("installed file changed while checking")
             }
-            let backups = profile.appendingPathComponent(".mcui-backups", isDirectory: true)
+            let backups = profile.appendingPathComponent(mod.backups, isDirectory: true)
             try manager.createDirectory(at: backups, withIntermediateDirectories: true)
             guard try backups.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else {
                 throw UpdateError.invalid("backup directory is a symbolic link")
@@ -171,6 +185,18 @@ actor MCUIUpdater {
         guard !parts.isEmpty else { return false }
         return parts.allSatisfy { part in
             if part == "*" { return true }
+            if part.hasPrefix("~") {
+                let base = String(part.dropFirst())
+                let pieces = base.split(separator: ".").compactMap { Int($0) }
+                guard !pieces.isEmpty, pieces.count == base.split(separator: ".").count,
+                      let lower = compare(version, base), lower >= 0 else { return false }
+                var upper = pieces
+                let index = pieces.count >= 2 ? 1 : 0
+                guard upper[index] < Int.max else { return false }
+                upper[index] += 1
+                upper = Array(upper.prefix(index + 1))
+                return compare(version, upper.map(String.init).joined(separator: ".")).map { $0 < 0 } ?? false
+            }
             if part.hasSuffix(".x") || part.hasSuffix(".*") {
                 let prefix = String(part.dropLast(2))
                 return version == prefix || version.hasPrefix(prefix + ".")
@@ -189,20 +215,32 @@ actor MCUIUpdater {
     }
 
     private static func compare(_ lhs: String, _ rhs: String) -> Int? {
-        func numbers(_ value: String) -> [Int]? {
-            let base = value.split(separator: "+", maxSplits: 1).first.map(String.init) ?? ""
-            let parts = base.split(separator: ".", omittingEmptySubsequences: false)
-            guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else { return nil }
-            let values = parts.compactMap { Int($0) }
-            return values.count == parts.count ? values : nil
+        func parse(_ value: String) -> ([Int], [String])? {
+            guard let base = value.split(separator: "+", maxSplits: 1).first else { return nil }
+            let parts = base.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+            let core = parts[0].split(separator: ".", omittingEmptySubsequences: false)
+            let numbers = core.compactMap { Int($0) }
+            guard !core.isEmpty, numbers.count == core.count, numbers.allSatisfy({ $0 >= 0 }) else { return nil }
+            let pre = parts.count == 2 ? parts[1].split(separator: ".", omittingEmptySubsequences: false).map(String.init) : []
+            guard pre.allSatisfy({ !$0.isEmpty && $0.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) }) else { return nil }
+            return (numbers, pre)
         }
-        guard let left = numbers(lhs), let right = numbers(rhs) else { return nil }
+        guard !lhs.isEmpty, !rhs.isEmpty, let (left, lp) = parse(lhs), let (right, rp) = parse(rhs) else { return nil }
         for index in 0..<max(left.count, right.count) {
             let a = index < left.count ? left[index] : 0
             let b = index < right.count ? right[index] : 0
             if a != b { return a < b ? -1 : 1 }
         }
-        return 0
+        if lp.isEmpty && rp.isEmpty { return 0 }
+        if lp.isEmpty { return 1 }
+        if rp.isEmpty { return -1 }
+        for index in 0..<min(lp.count, rp.count) where lp[index] != rp[index] {
+            if let a = Int(lp[index]), let b = Int(rp[index]) { return a < b ? -1 : 1 }
+            if Int(lp[index]) != nil { return -1 }
+            if Int(rp[index]) != nil { return 1 }
+            return lp[index] < rp[index] ? -1 : 1
+        }
+        return lp.count == rp.count ? 0 : (lp.count < rp.count ? -1 : 1)
     }
 
     private static func download(_ url: URL) async throws -> Data {
@@ -213,7 +251,7 @@ actor MCUIUpdater {
         let session = URLSession(configuration: configuration)
         defer { session.finishTasksAndInvalidate() }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
-        request.setValue("metalnakls-minecraft/1.3.6", forHTTPHeaderField: "User-Agent")
+        request.setValue("metalnakls-minecraft/1.3.7", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
             throw UpdateError.invalid("GitHub is unavailable or rate-limited")
