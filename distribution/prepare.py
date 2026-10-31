@@ -15,6 +15,22 @@ HERE = Path(__file__).resolve().parent
 def digest(path, algorithm='sha256'):
     return hashlib.file_digest(path.open('rb'), algorithm).hexdigest()
 
+def package_settings(settings, out):
+    with tarfile.open(out/'settings.tar.gz', 'w:gz') as tar:
+        tar.add(settings/'game', arcname='game', filter=lambda i: None if i.name.endswith('.DS_Store') else i)
+    with tarfile.open(out/'settings.tar.gz') as tar:
+        forbidden = {'saves', 'screenshots', 'logs', 'crash-reports', 'usercache.json', 'servers.dat', 'XaeroWorldMap', 'XaeroWaypoints'}
+        assert not any(forbidden.intersection(Path(n).parts) for n in tar.getnames()), 'Private game data in archive'
+
+def render_installer(out):
+    pins = {name:digest(out/name) for name in ('downloads.tsv','runtime-links.tsv','settings.tar.gz','Minecraft-arm64.zip')}
+    script = (HERE/'install.template.sh').read_text()
+    for name, sha in pins.items():
+        script = script.replace('@'+name+'@', sha)
+    (out/'install.sh').write_text(script)
+    (out/'install.sh').chmod(0o755)
+    (out/'SHA256SUMS').write_text(''.join(digest(p)+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name != 'SHA256SUMS'))
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--java-manifest', type=Path, required=True)
@@ -24,6 +40,7 @@ def main():
     ap.add_argument('--shader-url', help='Pinned shader fork release URL; omitted for local candidate checks')
     ap.add_argument('--bundled-mod', action='append', default=[], help='Explicit local mod artifact to mirror with its license notices')
     ap.add_argument('--require-resolved', action='store_true', help='Reject unresolved Modrinth lookups before a release')
+    ap.add_argument('--settings-only', action='store_true', help='Refresh settings while preserving all pinned binaries and version metadata')
     args = ap.parse_args()
     ROOT = args.minecraft_root.resolve()
     PROFILE = ROOT/'home/Fabric 26.3'
@@ -74,6 +91,22 @@ def main():
     options = (target / 'options.txt').read_text()
     if not re.search(r'^resourcePacks:\[\]$', options, re.M):
         raise ValueError('Enabled resource packs need explicit source URLs before packaging')
+
+    if args.settings_only:
+        # Version metadata must continue matching the existing download lock.
+        with tarfile.open(out/'settings.tar.gz') as old:
+            for member in old.getmembers():
+                if member.isfile() and member.name.startswith('game/versions/'):
+                    rel = Path(member.name)
+                    if '..' in rel.parts:
+                        raise ValueError('Unsafe version metadata path')
+                    dest = settings/rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(old.extractfile(member).read())
+        package_settings(settings, out)
+        render_installer(out)
+        print('Updated current settings; pinned binaries and version metadata preserved. No saves copied.')
+        return
 
     version_path = ROOT / 'versions/Fabric 26.3/Fabric 26.3.json'
     version = json.loads(version_path.read_text())
@@ -149,20 +182,9 @@ def main():
     (out/'mod-inventory.json').write_text(json.dumps(inventory, indent=2)+'\n')
     (out/'THIRD-PARTY-NOTICES.txt').write_text('\n\n'.join(notices)+'\n')
     (out/'downloads.tsv').write_text(''.join('\t'.join(x)+'\n' for x in rows))
-    with tarfile.open(out/'settings.tar.gz', 'w:gz') as tar:
-        tar.add(settings/'game', arcname='game', filter=lambda i: None if i.name.endswith('.DS_Store') else i)
-    with tarfile.open(out/'settings.tar.gz') as tar:
-        forbidden = {'saves', 'screenshots', 'logs', 'crash-reports', 'usercache.json', 'servers.dat', 'XaeroWorldMap', 'XaeroWaypoints'}
-        assert not any(forbidden.intersection(Path(n).parts) for n in tar.getnames()), 'Private game data in archive'
+    package_settings(settings, out)
     subprocess.run(['/usr/bin/ditto','-c','-k','--sequesterRsrc','--keepParent',str(args.app),str(out/'Minecraft-arm64.zip')], check=True)
-    # Installer embeds hashes for its manifests and release archives.
-    pins = {name:digest(out/name) for name in ('downloads.tsv','runtime-links.tsv','settings.tar.gz','Minecraft-arm64.zip')}
-    script = (HERE/'install.template.sh').read_text()
-    for name, sha in pins.items():
-        script = script.replace('@'+name+'@', sha)
-    (out/'install.sh').write_text(script)
-    (out/'install.sh').chmod(0o755)
-    (out/'SHA256SUMS').write_text(''.join(digest(p)+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name != 'SHA256SUMS'))
+    render_installer(out)
     print(f'Prepared {len(rows)} pinned downloads; {len(inventory)} mods in {out}')
     print('Nothing published. Modrinth hash lookups must pass before release; sign/notarize the app and rerun preparation.')
 
