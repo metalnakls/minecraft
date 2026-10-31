@@ -6,6 +6,83 @@ hash() { /usr/bin/shasum -a "$1" "$2" | /usr/bin/awk '{print $1}'; }
 get() { /usr/bin/curl --fail --location --silent --show-error --retry 4 --retry-all-errors --retry-max-time 90 --connect-timeout 10 --max-time 300 --proto '=https' --proto-redir '=https' "$1" -o "$2"; }
 safe_path() { case "$1" in ''|/*|../*|*/../*|*/..|*\\*) fail "Unsafe path: $1";; esac; }
 
+# Preserve partial bytes between attempts and invocations; promote only verified data.
+download_verified() {
+    local url="$1" dest="$2" algorithm="$3" expected="$4" attempt status http part="$2.part" delay
+    if [[ -f "$dest" ]] && [[ "$(hash "$algorithm" "$dest")" == "$expected" ]]; then return; fi
+    for attempt in 1 2 3 4; do
+        if [[ -f "$part" ]] && [[ "$(hash "$algorithm" "$part")" == "$expected" ]]; then mv -f "$part" "$dest"; return; fi
+        status=0; http=''
+        if [[ "$url" == /* ]]; then
+            cp "$url" "$part" || status=$?
+        else
+            http=$(/usr/bin/curl --fail --location --silent --show-error --continue-at - \
+                --connect-timeout 20 --max-time 300 --speed-limit 1024 --speed-time 45 \
+                --proto '=https' --proto-redir '=https' "$url" -o "$part" --write-out '%{http_code}') || status=$?
+        fi
+        if [[ "$status" -eq 0 ]]; then
+            if [[ "$(hash "$algorithm" "$part")" == "$expected" ]]; then mv -f "$part" "$dest"; return; fi
+            printf 'Checksum mismatch; retrying a fresh download: %s\n' "$url" >&2
+            rm -f "$part"
+        elif [[ "$status" -eq 33 || "$status" -eq 36 || "$http" == 416 ]]; then
+            # Some servers do not accept byte ranges. Restart only this file.
+            printf 'Server cannot resume this file; restarting it: %s\n' "$url" >&2
+            rm -f "$part"
+        fi
+        if [[ "$attempt" -lt 4 ]]; then
+            delay=$((attempt * 2))
+            printf 'Retry %s/4 in %ss (partial download retained): %s\n' "$((attempt+1))" "$delay" "$url" >&2
+            sleep "$delay"
+        fi
+    done
+    printf 'Download paused: %s\nRerun the same install command to resume.\n' "$url" >&2
+    return 1
+}
+record_progress() {
+    [[ -z "${MC_SETUP_PROGRESS:-}" ]] || printf '%s\t%s\n' "$1" "$2" >> "$MC_SETUP_PROGRESS"
+}
+verify_app() {
+    local target="$1" adhoc="$2" signature
+    /usr/bin/codesign --verify --deep --strict "$target" || return 1
+    if [[ "$adhoc" == true ]]; then
+        signature=$(/usr/bin/codesign -dv "$target" 2>&1) || { printf '%s\n' "$signature" >&2; return 1; }
+        # No early-closing pipe: grep -q could SIGPIPE a valid codesign process.
+        grep -q '^Signature=adhoc$' <<< "$signature" || fail 'Expected the explicitly selected ad-hoc build.'
+    else
+        /usr/sbin/spctl --assess --type execute "$target" || return 1
+    fi
+}
+stop_children() {
+    local parent="$1" child
+    for child in $(/usr/bin/pgrep -P "$parent" 2>/dev/null || true); do
+        stop_children "$child"
+        kill "$child" 2>/dev/null || true
+    done
+}
+finish_setup() {
+    local status=$?
+    trap - EXIT INT TERM
+    stop_children "$$"
+    if [[ -n "${setup_lock:-}" ]]; then rm -rf "$setup_lock"; fi
+    if [[ "$status" -ne 0 ]]; then
+        printf '\nSetup paused. Verified files and partial downloads are retained in %s\nRerun the same command to resume; matching files will be skipped.\n' "$base" >&2
+    fi
+    exit "$status"
+}
+show_progress() {
+    local active part path bytes
+    awk -F '\t' -v total="$total" '
+      {n++; count[$1]++}
+      END {printf "Progress: %d/%d files | %d reused from installation | %d cached/staged | %d downloaded\n", n,total,count["reused"],count["cached"],count["downloaded"]}' "$MC_SETUP_PROGRESS"
+    for active in "$stage"/active.*; do
+        [[ -f "$active" ]] || continue
+        IFS=$'\t' read -r part path < "$active" || continue
+        bytes=0
+        [[ ! -f "$part" ]] || bytes=$(stat -f %z "$part" 2>/dev/null || printf 0)
+        printf '  Downloading/resuming: %s (%s bytes received)\n' "$path" "$bytes"
+    done
+}
+
 resolve_url() {
     local url="$1" release="$2" json="$3" actual i candidate
     if [[ "$url" == modrinth:* ]]; then
@@ -54,35 +131,55 @@ probe_row() {
 
 fetch_row() {
     local release="$1" cache="$2" stage="$3" row="$4"
-    local algorithm expected mode path url cached tmp json i candidate actual
+    local algorithm expected mode path url cached tmp key installed='' alternate origin=cached
     IFS=$'\t' read -r algorithm expected mode path url <<< "$row"
     safe_path "$path"
     case "$algorithm" in 1|256) ;; *) fail 'Invalid hash algorithm';; esac
     case "$mode" in 644|755) ;; *) fail 'Invalid permissions';; esac
     [[ "$expected" =~ ^[0-9a-f]+$ ]] || fail 'Invalid digest'
-    # Reuse only installed payloads whose bytes match the pinned manifest.
-    local installed=''
+    mkdir -p "$stage/$(dirname "$path")"
     case "$path" in
         game/*) [[ -z "${MC_SETUP_EXISTING_GAME:-}" ]] || installed="$MC_SETUP_EXISTING_GAME/${path#game/}";;
         runtime/*) [[ -z "${MC_SETUP_EXISTING_RUNTIME:-}" ]] || installed="$MC_SETUP_EXISTING_RUNTIME/${path#runtime/}";;
     esac
     if [[ -n "$installed" && -f "$installed" && ! -L "$installed" ]] && [[ "$(hash "$algorithm" "$installed")" == "$expected" ]]; then
-        mkdir -p "$stage/$(dirname "$path")"
-        cp "$installed" "$stage/$path"
-        chmod "$mode" "$stage/$path"
-        return
+        cp "$installed" "$stage/$path"; chmod "$mode" "$stage/$path"
+        record_progress reused "$path"; return
+    fi
+    # A matching mod may already have a different filename.
+    case "$path" in
+        game/home/*/mods/*.jar)
+            if [[ -n "$installed" ]]; then
+                for alternate in "$(dirname "$installed")"/*.jar; do
+                    [[ -f "$alternate" && ! -L "$alternate" && "$alternate" != "$installed" ]] || continue
+                    if [[ "$(hash "$algorithm" "$alternate")" == "$expected" ]]; then
+                        cp "$alternate" "$stage/$path"; chmod "$mode" "$stage/$path"
+                        record_progress reused "$path"; return
+                    fi
+                done
+            fi;;
+    esac
+    if [[ -f "$stage/$path" ]] && [[ "$(hash "$algorithm" "$stage/$path")" == "$expected" ]]; then
+        chmod "$mode" "$stage/$path"; record_progress cached "$path"; return
     fi
     cached="$cache/$algorithm-$expected"
     if [[ ! -f "$cached" ]] || [[ "$(hash "$algorithm" "$cached")" != "$expected" ]]; then
-        tmp=$(mktemp "$cache/transfer.XXXXXX")
-        url=$(resolve_url "$url" "$release" "$tmp.json") || fail "Cannot resolve exact mod: $path"
-        if [[ "$url" == /* ]]; then cp "$url" "$tmp"; else get "$url" "$tmp"; fi
-        [[ "$(hash "$algorithm" "$tmp")" == "$expected" ]] || fail "Checksum mismatch: $path"
-        mv "$tmp" "$cached"
+        # Include the target path: duplicate manifest hashes can download in parallel.
+        key=$(printf '%s' "$path" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')
+        tmp="$cache/$algorithm-$expected-$key.download"
+        printf '%s\t%s\n' "$tmp.part" "$path" > "$stage/active.$key"
+        if [[ -f "$tmp" ]] && [[ "$(hash "$algorithm" "$tmp")" == "$expected" ]]; then
+            :
+        else
+            url=$(resolve_url "$url" "$release" "$tmp.json") || fail "Cannot resolve exact mod: $path"
+            download_verified "$url" "$tmp" "$algorithm" "$expected" || return 1
+        fi
+        mv -f "$tmp" "$cached"
+        rm -f "$stage/active.$key" "$tmp.json"
+        origin=downloaded
     fi
-    mkdir -p "$stage/$(dirname "$path")"
-    cp "$cached" "$stage/$path"
-    chmod "$mode" "$stage/$path"
+    cp "$cached" "$stage/$path"; chmod "$mode" "$stage/$path"
+    record_progress "$origin" "$path"
 }
 
 # Reject links and file/directory collisions before following destination paths.
@@ -113,7 +210,7 @@ mod_id() {
     /usr/bin/unzip -p "$1" fabric.mod.json 2>/dev/null | /usr/bin/plutil -extract id raw -o - - 2>/dev/null
 }
 merge_game() {
-    local src rel dest tmp id other other_id mods="$game/home/Fabric 26.3/mods"
+    local applied=0 src rel dest tmp id other other_id mods="$game/home/Fabric 26.3/mods"
     # Validate every destination before modifying any game file.
     while IFS= read -r -d '' src; do
         rel=${src#"$stage/game/"}; dest="$game/$rel"
@@ -128,6 +225,8 @@ merge_game() {
     fi
     while IFS= read -r -d '' src; do
         rel=${src#"$stage/game/"}; dest="$game/$rel"
+        applied=$((applied+1))
+        if [[ "$((applied % 250))" -eq 1 ]]; then printf 'Applying/reusing game files: %s checked\n' "$applied"; fi
         # Existing player preferences, skins and worlds belong to this Mac.
         case "$rel" in
             home/*/config/*|home/*/options.txt|home/*/CustomSkinLoader/*)
@@ -162,7 +261,10 @@ replace_directory() {
     check_destination "$dest"
     [[ ! -e "$dest" || -d "$dest" ]] || fail "Expected a directory: $dest"
     if [[ -d "$dest" ]]; then
-        diff -qr "$src" "$dest" >/dev/null && return 0
+        if diff -qr "$src" "$dest" >/dev/null; then
+            printf 'Reusing matching installation: %s\n' "$dest"
+            return 0
+        fi
         ensure_backup
         previous="$backup/$label"
         mv "$dest" "$previous"
@@ -242,15 +344,46 @@ else
     available=$(df -Pk "$base" | awk 'NR==2 {print $4}')
     [[ "$available" -ge 3145728 ]] || fail 'At least 3 GiB of free disk space is required for downloads and staging.'
     cache="$base/cache"
-    stage=$(mktemp -d "$base/stage.XXXXXX")
+    setup_lock="$base/setup.lock"
+    if ! mkdir "$setup_lock" 2>/dev/null; then
+        owner=$(cat "$setup_lock/pid" 2>/dev/null || true)
+        if [[ "$owner" =~ ^[0-9]+$ ]] && ! kill -0 "$owner" 2>/dev/null; then
+            rm -rf "$setup_lock"
+            mkdir "$setup_lock" || fail 'Another setup is starting; retry shortly.'
+        else
+            fail 'Another setup is running. Wait for it or stop it before resuming.'
+        fi
+    fi
+    printf '%s\n' "$$" > "$setup_lock/pid"
+    trap finish_setup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    stage="$base/stage-@downloads.tsv@"
+    mkdir -p "$stage"
+    rm -f "$stage"/active.*
 fi
 printf 'Staging downloads in %s\n' "$stage"
 # Retain staging on failures for diagnosis/resume through the content-addressed cache.
-trap 'printf "Setup stopped; downloads are retained in %s\n" "$stage" >&2' ERR
+if [[ "$mode" == dry ]]; then
+    trap 'printf "URL check stopped; report retained in %s\n" "$stage" >&2' ERR
+fi
 asset() {
-    local name="$1" expected="$2"
-    if [[ "$release" == /* ]]; then cp "$release/$name" "$stage/$name"; else get "$release/$name" "$stage/$name"; fi
-    [[ "$(hash 256 "$stage/$name")" == "$expected" ]] || fail "Release checksum mismatch: $name"
+    local name="$1" expected="$2" previous
+    if [[ -f "$stage/$name" ]] && [[ "$(hash 256 "$stage/$name")" == "$expected" ]]; then
+        printf 'Reusing verified release file: %s\n' "$name"; return
+    fi
+    if [[ "$mode" != dry ]]; then
+        # Import verified release archives retained by older installer attempts.
+        for previous in "$base"/stage.*/"$name"; do
+            [[ -f "$previous" ]] || continue
+            if [[ "$(hash 256 "$previous")" == "$expected" ]]; then
+                cp "$previous" "$stage/$name"
+                printf 'Reusing previous download: %s\n' "$name"; return
+            fi
+        done
+    fi
+    printf 'Downloading/resuming release file: %s\n' "$name"
+    download_verified "$release/$name" "$stage/$name" 256 "$expected" || fail "Release download paused: $name"
 }
 asset downloads.tsv '@downloads.tsv@'
 asset runtime-links.tsv '@runtime-links.tsv@'
@@ -303,9 +436,6 @@ asset settings.tar.gz '@settings.tar.gz@'
 asset Minecraft-arm64.zip '@Minecraft-arm64.zip@'
 receipt='@downloads.tsv@:@settings.tar.gz@:@Minecraft-arm64.zip@'
 if [[ "$mode" == install ]]; then
-    if [[ -f "$game/home/Fabric 26.3/.setup-release" ]] && [[ "$(cat "$game/home/Fabric 26.3/.setup-release")" == "$receipt" ]] && [[ -d "$app" ]] && [[ -x "$support/runtime/java-runtime-epsilon/jre.bundle/Contents/Home/bin/java" ]]; then
-        printf 'This release is already installed. Your settings and skins are unchanged.\n'; exit
-    fi
     for p in "$game/home/Fabric 26.3" "$support/runtime/java-runtime-epsilon" "$app"; do
         check_destination "$p"
         [[ ! -e "$p" || -d "$p" ]] || fail "Expected a directory: $p"
@@ -315,31 +445,45 @@ if [[ "$mode" == install ]]; then
     fi
     printf 'Using installation folder: %s\n' "$game"
 fi
-printf 'Downloading exact Minecraft, Fabric, Java and mod versions (4 parallel transfers)…\n'
+printf 'Checking installed files and cached downloads; fetching only missing or changed files…\n'
 export MC_SETUP_EXISTING_GAME="$game"
 export MC_SETUP_EXISTING_RUNTIME="$support/runtime/java-runtime-epsilon"
-tr '\n' '\0' < "$stage/downloads.tsv" | xargs -0 -P 4 -n 1 /bin/bash "$0" --fetch-row "$release" "$cache" "$stage"
+export MC_SETUP_PROGRESS="$stage/progress.tsv"
+: > "$MC_SETUP_PROGRESS"
+total=$(wc -l < "$stage/downloads.tsv" | tr -d ' ')
+tr '\n' '\0' < "$stage/downloads.tsv" | xargs -0 -P 4 -n 1 /bin/bash "$0" --fetch-row "$release" "$cache" "$stage" &
+workers=$!
+while kill -0 "$workers" 2>/dev/null; do
+    show_progress
+    sleep 2
+done
+status=0
+wait "$workers" || status=$?
+show_progress
+[[ "$status" -eq 0 ]] || fail 'Some downloads are incomplete. Rerun the same command to resume.'
 while IFS=$'\t' read -r path target; do
     [[ -n "$path" ]] || continue
     safe_path "$path"
     [[ "$path" == runtime/* && "$target" != /* ]] || fail 'Invalid runtime link'
     mkdir -p "$stage/$(dirname "$path")"
+    if [[ -L "$stage/$path" && "$(readlink "$stage/$path")" == "$target" ]]; then continue; fi
+    [[ ! -e "$stage/$path" && ! -L "$stage/$path" ]] || fail "Unexpected runtime link destination: $path"
     ln -s "$target" "$stage/$path"
 done < "$stage/runtime-links.tsv"
 # Archives are locally prepared and hash-pinned above, never arbitrary user archives.
 tar -xzf "$stage/settings.tar.gz" -C "$stage"
 /usr/bin/ditto -x -k "$stage/Minecraft-arm64.zip" "$stage/app"
+printf 'Verifying launcher signature and Java…\n'
 /usr/bin/codesign --verify --deep --strict "$stage/app/Minecraft.app"
 "$stage/runtime/jre.bundle/Contents/Home/bin/java" -version
 if [[ "$mode" == download ]]; then
     printf 'Downloaded and verified. Staged setup: %s\nNo installed files were changed.\n' "$stage"; exit
 fi
+verify_app "$stage/app/Minecraft.app" "$allow_adhoc" || fail 'Launcher signature verification failed.'
 if [[ "$allow_adhoc" == true ]]; then
-    /usr/bin/codesign -dv "$stage/app/Minecraft.app" 2>&1 | grep -q '^Signature=adhoc$' || fail 'Expected the explicitly selected ad-hoc build.'
     printf 'Installing an ad-hoc signed build: no Developer ID or Apple notarization. macOS may require Open Anyway.\n'
-else
-    /usr/sbin/spctl --assess --type execute "$stage/app/Minecraft.app" || fail 'This build is not accepted by Gatekeeper. For the deliberately ad-hoc release, rerun with --allow-adhoc. No system security settings are changed.'
 fi
+printf 'Applying verified files; preserving player data and backing up replacements…\n'
 backup=''
 merge_game
 replace_directory "$stage/runtime" "$support/runtime/java-runtime-epsilon" runtime

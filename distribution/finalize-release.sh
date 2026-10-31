@@ -11,10 +11,10 @@ app="$1"
 case "$4" in https://github.com/metalnakls/minecraftmetalshaders/releases/download/*) ;; *) echo 'Use a pinned shader fork release asset URL.' >&2; exit 1;; esac
 codesign --verify --deep --strict "$app"
 if [[ "$allow_adhoc" == true ]]; then
-    codesign -dv "$app" 2>&1 | grep -q '^Signature=adhoc$' || { echo 'Expected an ad-hoc signed app.' >&2; exit 1; }
+    codesign -dv "$app" 2>&1 | grep '^Signature=adhoc$' >/dev/null || { echo 'Expected an ad-hoc signed app.' >&2; exit 1; }
     echo 'Preparing the explicitly selected ad-hoc release; no Apple notarization.'
 else
-    codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Application:' || { echo 'Developer ID Application signature is required for this mode.' >&2; exit 1; }
+    codesign -dv "$app" 2>&1 | grep '^Authority=Developer ID Application:' >/dev/null || { echo 'Developer ID Application signature is required for this mode.' >&2; exit 1; }
     xcrun stapler validate "$app"
     /usr/sbin/spctl --assess --type execute "$app"
 fi

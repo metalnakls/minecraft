@@ -46,6 +46,9 @@ def run_case(root, fixed, cert, key):
         text = (HERE/'install.template.sh').read_text()
         if not fixed:
             text = text.replace(' --retry-all-errors', '')
+            original = 'download_verified "$url" "$tmp" "$algorithm" "$expected" || return 1'
+            assert original in text
+            text = text.replace(original, 'get "$url" "$tmp" || return 1')
         script = case/'install.sh'
         script.write_text(text)
         sha = hashlib.sha256(PAYLOAD).hexdigest()
