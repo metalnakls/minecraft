@@ -28,14 +28,22 @@ final class MemoryPressureAlertPresenter: AlertPresenter<MemoryPressureChoice> {
     func requestUserChoice(for level: MemoryPressureLevel) async -> MemoryPressureChoice {
         pressureLevel = level
         if NativeJavaRuntime.preparingAtStartup {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "game_launch.memory_pressure.title".localized()
-            alert.informativeText = level.localizedMessage
-            alert.addButton(withTitle: "common.continue".localized())
-            alert.addButton(withTitle: "common.cancel".localized())
-            NSApp.activate(ignoringOtherApps: true)
-            return alert.runModal() == .alertFirstButtonReturn ? .continueAnyway : .cancel
+            // Finish native startup before the modal loop; SDL later reuses this app.
+            NativeJavaRuntime.configureNativeApplication()
+            return autoreleasepool {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "game_launch.memory_pressure.title".localized()
+                alert.informativeText = level.localizedMessage
+                alert.addButton(withTitle: "common.continue".localized())
+                alert.addButton(withTitle: "common.cancel".localized())
+                NSApp.activate(ignoringOtherApps: true)
+                let response = alert.runModal()
+                // Dispose of the alert before SDL creates its fullscreen window.
+                alert.window.orderOut(nil)
+                alert.window.close()
+                return response == .alertFirstButtonReturn ? .continueAnyway : .cancel
+            }
         }
         return await requestUserChoice()
     }

@@ -39,6 +39,7 @@ enum NativeJavaRuntime {
     }
     private static var preparedLaunch: PreparedLaunch?
     static var preparingAtStartup = false
+    private static var applicationConfigured = false
 
     /// Called from the native entry point, after the preparation task has returned.
     static func runPreparedGameIfNeeded() {
@@ -55,7 +56,9 @@ enum NativeJavaRuntime {
     }
 
     /// SDL deliberately leaves application initialization to an existing native host.
-    private static func configureNativeApplication() {
+    static func configureNativeApplication() {
+        guard !applicationConfigured else { return }
+        applicationConfigured = true
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         if app.windowsMenu == nil {
