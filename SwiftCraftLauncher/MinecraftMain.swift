@@ -9,6 +9,7 @@ enum MinecraftMain {
 
     static func main() {
         NativeJavaRuntime.resumeLauncherThreadIfNeeded()
+        _ = MinecraftApplication.shared
         // Exercise the shipped executable's JLI entrypoint without loading a profile.
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--verify-java" {
             _ = NSApplication.shared

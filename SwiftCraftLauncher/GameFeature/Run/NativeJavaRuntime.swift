@@ -46,6 +46,7 @@ enum NativeJavaRuntime {
         guard var prepared = preparedLaunch else { return }
         preparedLaunch = nil
         configureNativeApplication()
+        (NSApp as? MinecraftApplication)?.gameRunning = true
         let status = prepared.arguments.withUnsafeMutableBufferPointer { buffer in
             let call = Invocation(launch: prepared.launch, count: Int32(buffer.count - 1),
                                   arguments: buffer.baseAddress!, names: prepared.names)
