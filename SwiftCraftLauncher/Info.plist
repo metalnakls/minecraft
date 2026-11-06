@@ -23,7 +23,13 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>SUPublicEDKey</key>
-	<string>$(SPARKLE_PUBLIC_KEY)</string>
+	<string>CVcLWiitta15Lm4GWP6NjS9D5fH1XKaCPcekfycy1gY=</string>
+	<key>SUFeedURL</key>
+	<string>https://metalnakls.github.io/minecraft/appcast.xml</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

@@ -27,6 +27,7 @@ enum MinecraftMain {
             }
             return
         }
+        DIContainer.shared.system.sparkleUpdateService.scheduleStartupCheckIfNeeded()
         if !NSEvent.modifierFlags.contains(.option),
            !CommandLine.arguments.contains("--launcher") {
             _ = NSApplication.shared

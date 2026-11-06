@@ -40,6 +40,7 @@ final class SparkleUpdateService: NSObject, SPUUpdaterDelegate, @unchecked Senda
             try updater?.start()
 
             updater?.automaticallyChecksForUpdates = true
+            updater?.automaticallyDownloadsUpdates = true
             updater?.updateCheckInterval = 24 * 60 * 60
             updater?.sendsSystemProfile = false
         } catch {
@@ -54,9 +55,7 @@ final class SparkleUpdateService: NSObject, SPUUpdaterDelegate, @unchecked Senda
     }
 
     func feedURLString(for _: SPUUpdater) -> String? {
-        let architecture = getSystemArchitecture()
-        let appcastURL = URLConfig.API.Sparkle.appcastURL(architecture: architecture)
-        return appcastURL.absoluteString
+        return "https://metalnakls.github.io/minecraft/appcast.xml"
     }
 
     func updaterDidNotFindUpdate(_: SPUUpdater) {
@@ -126,26 +125,5 @@ final class SparkleUpdateService: NSObject, SPUUpdaterDelegate, @unchecked Senda
         }
 
         updater.checkForUpdatesInBackground()
-    }
-}
-
-/// Intercepts download requests to rewrite the URL to the configured download mirror.
-extension SparkleUpdateService {
-    func updater(_: SPUUpdater, willDownloadUpdate _: SUAppcastItem, with request: NSMutableURLRequest) {
-        guard let originalURL = request.url else { return }
-
-        let version = versionString
-        guard !version.isEmpty else {
-            AppLog.common.warning("Update download URL rewrite skipped: version is empty, using original URL")
-            return
-        }
-
-        let fileName = originalURL.lastPathComponent
-        let mirroredURL = URLConfig.API.Sparkle.downloadBaseURL
-            .appendingPathComponent(version)
-            .appendingPathComponent(fileName)
-
-        AppLog.common.info("Update download URL rewritten: \(originalURL.absoluteString) -> \(mirroredURL.absoluteString)")
-        request.url = mirroredURL
     }
 }
