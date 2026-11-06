@@ -112,7 +112,7 @@ enum NativeJavaRuntime {
         for (key, value) in environment { setenv(key, value, 1) }
         setenv("JAVA_HOME", javaHome.path, 1)
 
-        // Keep the Icon Composer bundle icon; Minecraft's SDL icon setter is opt-out in our mod.
+        // MinecraftApplication preserves the Icon Composer bundle icon against SDL bitmap updates.
         var options = arguments.filter {
             !$0.hasPrefix("-Xdock:icon=") && !$0.hasPrefix("-Xdock:name=")
         }

@@ -5,6 +5,15 @@ import Darwin
 @MainActor
 final class MinecraftApplication: NSApplication {
     var gameRunning = false
+    // Keep Icon Composer appearances supplied by the bundle when SDL sets its grass-block bitmap.
+    override var applicationIconImage: NSImage! {
+        get { super.applicationIconImage }
+        set {
+            guard !gameRunning else { return }
+            super.applicationIconImage = newValue
+        }
+    }
+
     private var confirmingQuit = false
     private var quitRequested = false
 
