@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Minecraft launcher updates</title>
+    <item>
+      <title>4.1</title>
+      <sparkle:version>95</sparkle:version>
+      <sparkle:shortVersionString>4.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>Launcher updates from this fork, with dynamic icon preservation.</description>
+      <enclosure url="https://github.com/metalnakls/minecraft/releases/download/4.1/Minecraft-arm64.zip" type="application/octet-stream" length="6876244" sparkle:edSignature="ezyOfpcSKaCy4bAIVpQUl363Ls/l8BDQtNwBJoN+gvi6wJAtuxxxcRVk7ByaM8RPH2xcVsy9RJAcU4V14a9lCQ==" />
+    </item>
+  </channel>
+</rss>
