@@ -48,6 +48,11 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     jar(profile/'mods/unrelated.jar', 'unrelated', '1.0')
     jar(staged/'mods/mcui.jar', 'cleanmenu', '0.1.0')
     jar(staged/'mods/metal.jar', 'mcopt-metal', '1.2.6-alpha')
+    jar(profile/'mods/old-emf.jar', 'entity_model_features', '3.3.10')
+    emf = staged/'mods/entity-model-features.jar'
+    with zipfile.ZipFile(emf, 'w') as archive:
+        # EMF and ETF ship an unescaped tab in their description field.
+        archive.writestr('fabric.mod.json', '{"id":"entity_model_features","description":"Model\tfeatures"}')
     jar(profile/'mods/renamed-renderer.jar', 'sodium', '0.9.2+mc26.3')
     sodium = (profile/'mods/renamed-renderer.jar').read_bytes()
     old_mod = (profile/'mods/old-name.jar').read_bytes()
@@ -61,6 +66,8 @@ with tempfile.TemporaryDirectory(prefix='minecraft-reuse-') as directory:
     assert (profile/'config/DistantHorizons.toml').read_text() == 'vanillaFadeMode = "NONE"\n'
     assert (profile/'mods/mcui.jar').exists() and not (profile/'mods/old-name.jar').exists()
     assert (profile/'mods/unrelated.jar').exists()
+    assert (profile/'mods/entity-model-features.jar').read_bytes() == emf.read_bytes()
+    assert not (profile/'mods/old-emf.jar').exists()
     assert not (profile/'mods/renamed-renderer.jar').exists(), 'Conflicting Sodium is still enabled'
     backups = list((base/'backups').iterdir())
     assert len(backups) == 1

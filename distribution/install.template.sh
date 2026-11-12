@@ -207,7 +207,18 @@ backup_file() {
     cmp -s "$src" "$backup/$rel" || fail "Backup verification failed: $src"
 }
 mod_id() {
-    /usr/bin/unzip -p "$1" fabric.mod.json 2>/dev/null | /usr/bin/plutil -extract id raw -o - - 2>/dev/null
+    local metadata id
+    metadata=$(/usr/bin/unzip -p "$1" fabric.mod.json 2>/dev/null) || return 1
+    if ! id=$(/usr/bin/plutil -extract id raw -o - - 2>/dev/null <<< "$metadata"); then
+        # Fabric accepts literal control characters in descriptions that plutil rejects.
+        id=$(/usr/bin/perl -MJSON::PP -0777 -ne '
+            my $mod = JSON::PP->new->utf8->loose->decode($_);
+            exit 1 unless ref($mod) eq "HASH" && defined($mod->{id}) && !ref($mod->{id});
+            print $mod->{id};
+        ' 2>/dev/null <<< "$metadata") || return 1
+    fi
+    [[ "$id" =~ ^[a-z][a-z0-9_-]{1,63}$ ]] || return 1
+    printf '%s\n' "$id"
 }
 merge_game() {
     local applied=0 src rel dest tmp id other other_id mods="$game/home/Fabric 26.3/mods"
