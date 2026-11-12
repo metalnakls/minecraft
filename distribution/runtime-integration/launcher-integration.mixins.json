@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "minecraft.launcher.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "plugin": "minecraft.launcher.mixin.IntegrationPlugin",
+  "client": [
+    "CommandSneakMixin",
+    "CommandSneakInputMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

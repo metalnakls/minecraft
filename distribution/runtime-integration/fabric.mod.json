@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "minecraft_launcher_integration",
+  "version": "4.1",
+  "name": "Minecraft Launcher Integration",
+  "environment": "client",
+  "license": "Apache-2.0",
+  "mixins": [
+    "launcher-integration.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "java": ">=25"
+  }
+}
